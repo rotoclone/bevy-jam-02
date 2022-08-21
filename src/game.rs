@@ -32,7 +32,8 @@ struct NextSeasonButton;
 struct Season(u32);
 
 fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Res<Season>) {
-    let font = asset_server.load(MAIN_FONT);
+    let main_font = asset_server.load(MAIN_FONT);
+    let title_font = asset_server.load(TITLE_FONT);
 
     // plants section
     commands
@@ -62,8 +63,8 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                 TextBundle::from_section(
                     "Plants",
                     TextStyle {
-                        font: font.clone(),
-                        font_size: 30.0,
+                        font: title_font.clone(),
+                        font_size: 40.0,
                         color: Color::WHITE,
                     },
                 )
@@ -108,8 +109,8 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                 TextBundle::from_section(
                     "Seeds",
                     TextStyle {
-                        font: font.clone(),
-                        font_size: 30.0,
+                        font: title_font.clone(),
+                        font_size: 40.0,
                         color: Color::WHITE,
                     },
                 )
@@ -150,7 +151,7 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                     TextBundle::from_section(
                         format!("Season {}", season.0),
                         TextStyle {
-                            font: font.clone(),
+                            font: main_font.clone(),
                             font_size: 30.0,
                             color: Color::WHITE,
                         },
@@ -200,7 +201,7 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                     parent.spawn_bundle(TextBundle::from_section(
                         "Next Season",
                         TextStyle {
-                            font: font.clone(),
+                            font: main_font.clone(),
                             font_size: 30.0,
                             color: Color::SEA_GREEN,
                         },

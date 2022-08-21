@@ -21,7 +21,7 @@ struct StartButton;
 
 /// Sets up the main menu screen.
 fn menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let font = asset_server.load(MAIN_FONT);
+    let font = asset_server.load(TITLE_FONT);
 
     // title text
     commands
@@ -47,7 +47,7 @@ fn menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                     "Mr. Smartyplants",
                     TextStyle {
                         font: font.clone(),
-                        font_size: 70.0,
+                        font_size: 90.0,
                         color: Color::WHITE,
                     },
                 )
@@ -96,7 +96,7 @@ fn menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                         "Start",
                         TextStyle {
                             font: font.clone(),
-                            font_size: 40.0,
+                            font_size: 50.0,
                             color: Color::SEA_GREEN,
                         },
                     ));

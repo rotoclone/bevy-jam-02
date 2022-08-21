@@ -15,7 +15,8 @@ use win::*;
 
 const DEV_MODE: bool = true;
 
-const MAIN_FONT: &str = "fonts/FiraMono-Medium.ttf";
+const MAIN_FONT: &str = "fonts/Quicksand-Medium.ttf";
+const TITLE_FONT: &str = "fonts/FredokaOne-Regular.ttf";
 
 const NORMAL_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const HOVERED_BUTTON: Color = Color::rgb(0.35, 0.35, 0.35);
