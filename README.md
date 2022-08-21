@@ -1,4 +1,4 @@
-# Mister Smartyplants
+# Mr. Smartyplants
 
 For Bevy Jam 2: https://itch.io/jam/bevy-jam-2
 
