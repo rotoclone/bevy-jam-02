@@ -1,6 +1,10 @@
 use crate::*;
 
-const TOP_BAR_COLOR: Color = Color::rgba(1.0, 1.0, 1.0, 0.05);
+const TOP_BAR_COLOR: Color = Color::rgba(0.0, 0.0, 0.0, 0.5);
+const TOP_BAR_HEIGHT: f32 = 40.0;
+
+const BOTTOM_BAR_COLOR: Color = Color::rgba(0.0, 0.0, 0.0, 0.5);
+const BOTTOM_BAR_HEIGHT: f32 = 50.0;
 
 pub struct GamePlugin;
 
@@ -30,11 +34,103 @@ struct Season(u32);
 fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Res<Season>) {
     let font = asset_server.load(MAIN_FONT);
 
+    // plants section
+    commands
+        .spawn_bundle(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(75.0), Val::Percent(100.0)),
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    right: Val::Px(0.0),
+                    ..default()
+                },
+                padding: UiRect {
+                    top: Val::Px(TOP_BAR_HEIGHT),
+                    bottom: Val::Px(BOTTOM_BAR_HEIGHT),
+                    ..default()
+                },
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::FlexEnd,
+                ..default()
+            },
+            color: Color::rgb(0.07, 0.43, 0.0).into(),
+            ..default()
+        })
+        .insert(GameComponent)
+        .with_children(|parent| {
+            parent.spawn_bundle(
+                TextBundle::from_section(
+                    "Plants",
+                    TextStyle {
+                        font: font.clone(),
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                    },
+                )
+                .with_text_alignment(TextAlignment::CENTER)
+                .with_style(Style {
+                    margin: UiRect {
+                        left: Val::Auto,
+                        right: Val::Auto,
+                        top: Val::Px(5.0),
+                        bottom: Val::Px(5.0),
+                    },
+                    ..default()
+                }),
+            );
+        });
+
+    // seeds section
+    commands
+        .spawn_bundle(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(25.0), Val::Percent(100.0)),
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    left: Val::Px(0.0),
+                    ..default()
+                },
+                padding: UiRect {
+                    top: Val::Px(TOP_BAR_HEIGHT),
+                    bottom: Val::Px(BOTTOM_BAR_HEIGHT),
+                    ..default()
+                },
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::FlexEnd,
+                ..default()
+            },
+            color: Color::rgb(0.23, 0.18, 0.05).into(),
+            ..default()
+        })
+        .insert(GameComponent)
+        .with_children(|parent| {
+            parent.spawn_bundle(
+                TextBundle::from_section(
+                    "Seeds",
+                    TextStyle {
+                        font: font.clone(),
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                    },
+                )
+                .with_text_alignment(TextAlignment::CENTER)
+                .with_style(Style {
+                    margin: UiRect {
+                        left: Val::Auto,
+                        right: Val::Auto,
+                        top: Val::Px(5.0),
+                        bottom: Val::Px(5.0),
+                    },
+                    ..default()
+                }),
+            );
+        });
+
     // top bar
     commands
         .spawn_bundle(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Px(40.0)),
+                size: Size::new(Val::Percent(100.0), Val::Px(TOP_BAR_HEIGHT)),
                 position_type: PositionType::Absolute,
                 position: UiRect {
                     top: Val::Px(0.0),
@@ -68,11 +164,11 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                 .insert(SeasonText);
         });
 
-    // next season button
+    // bottom bar
     commands
         .spawn_bundle(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(100.0), Val::Percent(50.0)),
+                size: Size::new(Val::Percent(100.0), Val::Px(BOTTOM_BAR_HEIGHT)),
                 position_type: PositionType::Absolute,
                 position: UiRect {
                     bottom: Val::Px(0.0),
@@ -82,7 +178,7 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                 align_items: AlignItems::FlexEnd,
                 ..default()
             },
-            color: UiColor(Color::NONE),
+            color: BOTTOM_BAR_COLOR.into(),
             ..default()
         })
         .insert(GameComponent)
@@ -90,7 +186,7 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
             parent
                 .spawn_bundle(ButtonBundle {
                     style: Style {
-                        size: Size::new(Val::Px(200.0), Val::Px(50.0)),
+                        size: Size::new(Val::Px(200.0), Val::Px(BOTTOM_BAR_HEIGHT * 0.8)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         margin: UiRect::all(Val::Auto),
@@ -111,8 +207,6 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                     ));
                 });
         });
-
-    //TODO
 }
 
 type InteractedNextSeasonButtonTuple = (Changed<Interaction>, With<NextSeasonButton>);
