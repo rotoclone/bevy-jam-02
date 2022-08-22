@@ -13,6 +13,9 @@ use game::*;
 mod win;
 use win::*;
 
+mod plant;
+use plant::*;
+
 const DEV_MODE: bool = true;
 
 const MAIN_FONT: &str = "fonts/Quicksand-Medium.ttf";
