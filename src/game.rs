@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use bevy::{ecs::schedule::ShouldRun, ui::FocusPolicy};
+
 use crate::*;
 
 const TOP_BAR_COLOR: Color = Color::rgba(0.0, 0.0, 0.0, 0.5);
@@ -10,6 +14,9 @@ const NUM_PLANT_SPACES: usize = 4;
 const PLANT_SPACE_SIZE: f32 = 200.0;
 const PLANT_SPACE_MARGIN: f32 = 10.0;
 
+const MAX_INTELLIGENCE: usize = 10;
+const MAX_PEST_RESISTANCE: usize = 10;
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
@@ -20,7 +27,8 @@ impl Plugin for GamePlugin {
                     .with_system(despawn_components_system::<GameComponent>),
             )
             .add_system(next_season_button_system)
-            .add_system(plant_display_system)
+            .add_system(plant_display_system.with_run_criteria(is_set_up))
+            .insert_resource(SetUp(false))
             .insert_resource(Season(1))
             .insert_resource(generate_starting_plants());
     }
@@ -38,7 +46,19 @@ struct NextSeasonButton;
 #[derive(Component)]
 struct PlantSpace(usize);
 
+impl Plants {
+    /// Gets the plant in the provided space, if there is one.
+    fn with_id(&self, id: usize) -> Option<&Plant> {
+        self.0.get(id)
+    }
+}
+
+#[derive(Component)]
+struct PlantInfo(usize);
+
 struct Season(u32);
+
+struct SetUp(bool);
 
 fn generate_starting_plants() -> Plants {
     //TODO generate plant names?
@@ -87,9 +107,19 @@ fn generate_starting_plants() -> Plants {
     Plants(vec![plant_1, plant_2, plant_3])
 }
 
-fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Res<Season>) {
+fn is_set_up(set_up: Res<SetUp>) -> ShouldRun {
+    set_up.0.into()
+}
+
+fn game_setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    season: Res<Season>,
+    mut set_up: ResMut<SetUp>,
+) {
     let main_font = asset_server.load(MAIN_FONT);
     let title_font = asset_server.load(TITLE_FONT);
+    let computer_font = asset_server.load(COMPUTER_FONT);
 
     // plants section
     commands
@@ -140,24 +170,89 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                 }),
             );
 
-            // spaces for plants
-            for i in 0..NUM_PLANT_SPACES {
-                parent
-                    .spawn_bundle(NodeBundle {
-                        style: Style {
-                            size: Size::new(Val::Px(PLANT_SPACE_SIZE), Val::Px(PLANT_SPACE_SIZE)),
-                            position_type: PositionType::Relative,
-                            margin: UiRect::all(Val::Px(PLANT_SPACE_MARGIN)),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::FlexEnd,
-                            align_self: AlignSelf::Center,
-                            ..default()
-                        },
-                        color: Color::rgb(0.23, 0.18, 0.05).into(),
+            // wrapper
+            parent
+                .spawn_bundle(NodeBundle {
+                    style: Style {
+                        size: Size::new(
+                            Val::Px(
+                                (PLANT_SPACE_SIZE + (PLANT_SPACE_MARGIN * 2.0))
+                                    * NUM_PLANT_SPACES as f32,
+                            ),
+                            Val::Px((PLANT_SPACE_SIZE + (PLANT_SPACE_MARGIN * 2.0)) * 2.0),
+                        ),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::FlexEnd,
+                        align_content: AlignContent::Center,
+                        align_self: AlignSelf::Center,
+                        flex_wrap: FlexWrap::Wrap,
                         ..default()
-                    })
-                    .insert(PlantSpace(i));
-            }
+                    },
+                    color: Color::NONE.into(),
+                    ..default()
+                })
+                .add_children(|wrapper_parent| {
+                    // spaces for plants
+                    for i in 0..NUM_PLANT_SPACES {
+                        wrapper_parent
+                            .spawn_bundle(NodeBundle {
+                                style: Style {
+                                    size: Size::new(
+                                        Val::Px(PLANT_SPACE_SIZE),
+                                        Val::Px(PLANT_SPACE_SIZE),
+                                    ),
+                                    position_type: PositionType::Relative,
+                                    margin: UiRect::all(Val::Px(PLANT_SPACE_MARGIN)),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::FlexEnd,
+                                    align_self: AlignSelf::Center,
+                                    ..default()
+                                },
+                                color: Color::rgb(0.23, 0.18, 0.05).into(),
+                                ..default()
+                            })
+                            .insert(PlantSpace(i))
+                            .insert(Interaction::None);
+                    }
+
+                    // spaces for plant info
+                    for i in 0..NUM_PLANT_SPACES {
+                        wrapper_parent
+                            .spawn_bundle(NodeBundle {
+                                style: Style {
+                                    size: Size::new(
+                                        Val::Px(PLANT_SPACE_SIZE),
+                                        Val::Px(PLANT_SPACE_SIZE),
+                                    ),
+                                    position_type: PositionType::Relative,
+                                    margin: UiRect::all(Val::Px(PLANT_SPACE_MARGIN)),
+                                    padding: UiRect::all(Val::Px(5.0)),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    align_self: AlignSelf::Center,
+                                    ..default()
+                                },
+                                color: Color::BLACK.into(),
+                                ..default()
+                            })
+                            .with_children(|plant_info_parent| {
+                                plant_info_parent
+                                    .spawn_bundle(
+                                        TextBundle::from_section(
+                                            "",
+                                            TextStyle {
+                                                font: computer_font.clone(),
+                                                font_size: 25.0,
+                                                color: Color::GREEN,
+                                            },
+                                        )
+                                        .with_text_alignment(TextAlignment::CENTER),
+                                    )
+                                    .insert(PlantInfo(i));
+                            });
+                    }
+                    //TODO
+                });
         });
 
     // seeds section
@@ -288,6 +383,8 @@ fn game_setup(mut commands: Commands, asset_server: Res<AssetServer>, season: Re
                     ));
                 });
         });
+
+    set_up.0 = true;
 }
 
 type InteractedNextSeasonButtonTuple = (Changed<Interaction>, With<NextSeasonButton>);
@@ -321,12 +418,19 @@ fn plant_display_system(
     commands: Commands,
     asset_server: Res<AssetServer>,
     plant_spaces_query: Query<(Entity, &PlantSpace)>,
+    plant_info_query: Query<(&mut Text, &PlantInfo)>,
 ) {
     if !plants.is_changed() {
-        //TODO return;
+        return;
     }
 
-    update_plant_display(plants, commands, asset_server, plant_spaces_query);
+    update_plant_display(
+        plants,
+        commands,
+        asset_server,
+        plant_spaces_query,
+        plant_info_query,
+    );
 }
 
 fn update_plant_display(
@@ -334,42 +438,80 @@ fn update_plant_display(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     plant_spaces_query: Query<(Entity, &PlantSpace)>,
+    mut plant_info_query: Query<(&mut Text, &PlantInfo)>,
 ) {
+    let mut plant_info_text_map = HashMap::new();
+    for (text, plant_info) in plant_info_query.iter_mut() {
+        plant_info_text_map.insert(plant_info.0, text);
+    }
+
     for (entity, plant_space) in plant_spaces_query.iter() {
         let mut entity_commands = commands.entity(entity);
         entity_commands.despawn_descendants();
 
-        if plants.0.len() < (plant_space.0 + 1) {
-            // no plant in this space
-            continue;
+        if let Some(plant) = plants.with_id(plant_space.0) {
+            let phenotype = plant.get_phenotype();
+
+            // spawn plant images
+            entity_commands.with_children(|parent| {
+                // stem
+                parent.spawn_bundle(ImageBundle {
+                    image: get_image_for_stem_style(&phenotype.stem_style, &asset_server).into(),
+                    color: get_color_for_stem_color(&phenotype.stem_color).into(),
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    focus_policy: FocusPolicy::Pass,
+                    ..default()
+                });
+
+                // fruit
+                parent.spawn_bundle(ImageBundle {
+                    image: get_image_for_fruit_style(&phenotype.fruit_style, &asset_server).into(),
+                    color: get_color_for_fruit_color(&phenotype.fruit_color).into(),
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    focus_policy: FocusPolicy::Pass,
+                    ..default()
+                });
+            });
+
+            // update plant info
+            if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
+                let phenotype = plant.get_phenotype();
+
+                let name_text = format!("Name: {}", plant.name);
+
+                let intelligence = if phenotype.intelligence < 0 {
+                    0
+                } else {
+                    phenotype.intelligence as usize
+                };
+                let intelligence_filled_bar = "#".repeat(intelligence);
+                let intelligence_empty_bar =
+                    " ".repeat(MAX_INTELLIGENCE.saturating_sub(intelligence));
+                let intelligence_text =
+                    format!("Intelligence:\n[{intelligence_filled_bar}{intelligence_empty_bar}]");
+
+                let pest_resistance = if phenotype.pest_resistance < 0 {
+                    0
+                } else {
+                    phenotype.pest_resistance as usize
+                };
+                let pest_resistance_filled_bar = "#".repeat(pest_resistance);
+                let pest_resistance_empty_bar =
+                    " ".repeat(MAX_PEST_RESISTANCE.saturating_sub(pest_resistance));
+                let pest_resistance_text = format!(
+                    "Pest Resistance:\n[{pest_resistance_filled_bar}{pest_resistance_empty_bar}]"
+                );
+
+                text.sections[0].value =
+                    format!("{name_text}\n\n{intelligence_text}\n{pest_resistance_text}");
+            }
         }
-
-        let plant = &plants.0[plant_space.0];
-        let phenotype = plant.get_phenotype();
-
-        entity_commands.with_children(|parent| {
-            // stem
-            parent.spawn_bundle(ImageBundle {
-                image: get_image_for_stem_style(&phenotype.stem_style, &asset_server).into(),
-                color: get_color_for_stem_color(&phenotype.stem_color).into(),
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    ..default()
-                },
-                ..default()
-            });
-
-            // fruit
-            parent.spawn_bundle(ImageBundle {
-                image: get_image_for_fruit_style(&phenotype.fruit_style, &asset_server).into(),
-                color: get_color_for_fruit_color(&phenotype.fruit_color).into(),
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    ..default()
-                },
-                ..default()
-            });
-        });
     }
 }
 

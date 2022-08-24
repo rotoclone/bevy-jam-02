@@ -4,6 +4,9 @@ use bevy::{
 };
 use bevy_inspector_egui::{WorldInspectorParams, WorldInspectorPlugin};
 
+mod cursor_position;
+use cursor_position::*;
+
 mod menu;
 use menu::*;
 
@@ -20,6 +23,7 @@ const DEV_MODE: bool = true;
 
 const MAIN_FONT: &str = "fonts/Quicksand-Medium.ttf";
 const TITLE_FONT: &str = "fonts/FredokaOne-Regular.ttf";
+const COMPUTER_FONT: &str = "fonts/VT323-Regular.ttf";
 
 const NORMAL_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const HOVERED_BUTTON: Color = Color::rgb(0.35, 0.35, 0.35);
@@ -43,6 +47,7 @@ fn main() {
         })
         .add_state(GameState::Menu)
         .add_startup_system(setup)
+        .add_plugin(CursorPositionPlugin)
         .add_plugin(MenuPlugin)
         .add_plugin(GamePlugin)
         .add_plugin(EndPlugin)
@@ -66,7 +71,9 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     // camera
-    commands.spawn_bundle(Camera2dBundle::default());
+    commands
+        .spawn_bundle(Camera2dBundle::default())
+        .insert(MainCamera);
 }
 
 type InteractedButtonTuple = (Changed<Interaction>, With<Button>);
