@@ -14,8 +14,15 @@ const NUM_PLANT_SPACES: usize = 4;
 const PLANT_SPACE_SIZE: f32 = 200.0;
 const PLANT_SPACE_MARGIN: f32 = 10.0;
 
+const NUM_SEED_SPACES: usize = 4;
+const SEED_SPACE_WIDTH: f32 = 250.0;
+const SEED_SPACE_HEIGHT: f32 = 100.0;
+const SEED_SPACE_MARGIN: f32 = 10.0;
+
 const MAX_INTELLIGENCE: usize = 10;
 const MAX_PEST_RESISTANCE: usize = 10;
+
+const HELP_TEXT: &str = include_str!("../assets/help.txt");
 
 pub struct GamePlugin;
 
@@ -27,10 +34,18 @@ impl Plugin for GamePlugin {
                     .with_system(despawn_components_system::<GameComponent>),
             )
             .add_system(next_season_button_system)
+            .add_system(help_button_system)
             .add_system(plant_display_system.with_run_criteria(is_set_up))
+            .add_system(seed_display_system.with_run_criteria(is_set_up))
             .insert_resource(SetUp(false))
             .insert_resource(Season(1))
-            .insert_resource(generate_starting_plants());
+            .insert_resource(generate_starting_plants())
+            // TODO .insert_resource(Seeds(Vec::new()));
+            .insert_resource(Seeds(vec![Seed {
+                parent_name_1: "some parent".to_string(),
+                parent_name_2: "some other parent".to_string(),
+                genes: Vec::new(),
+            }]));
     }
 }
 
@@ -44,11 +59,30 @@ struct SeasonText;
 struct NextSeasonButton;
 
 #[derive(Component)]
+struct HelpButton;
+
+#[derive(Component)]
+struct CloseHelpButton;
+
+#[derive(Component)]
+struct HelpScreen;
+
+#[derive(Component)]
 struct PlantSpace(usize);
 
 impl Plants {
-    /// Gets the plant in the provided space, if there is one.
+    /// Gets the plant with the provided ID, if there is one.
     fn with_id(&self, id: usize) -> Option<&Plant> {
+        self.0.get(id)
+    }
+}
+
+#[derive(Component)]
+struct SeedSpace(usize);
+
+impl Seeds {
+    /// Gets the seed with the provided ID, if there is one.
+    fn with_id(&self, id: usize) -> Option<&Seed> {
         self.0.get(id)
     }
 }
@@ -140,6 +174,7 @@ fn game_setup(
                 align_items: AlignItems::FlexEnd,
                 align_content: AlignContent::Center,
                 flex_wrap: FlexWrap::Wrap,
+                flex_direction: FlexDirection::ColumnReverse, //TODO remove?
                 ..default()
             },
             color: Color::rgb(0.07, 0.43, 0.0).into(),
@@ -162,10 +197,15 @@ fn game_setup(
                     margin: UiRect {
                         left: Val::Auto,
                         right: Val::Auto,
-                        top: Val::Px(5.0),
-                        bottom: Val::Px(5.0),
+                        top: Val::Px(10.0),
+                        bottom: Val::Px(10.0),
+                    },
+                    position: UiRect {
+                        top: Val::Px(TOP_BAR_HEIGHT + 10.0),
+                        ..default()
                     },
                     position_type: PositionType::Absolute,
+                    align_self: AlignSelf::Center,
                     ..default()
                 }),
             );
@@ -251,7 +291,6 @@ fn game_setup(
                                     .insert(PlantInfo(i));
                             });
                     }
-                    //TODO
                 });
         });
 
@@ -272,6 +311,7 @@ fn game_setup(
                 },
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::FlexEnd,
+                flex_direction: FlexDirection::ColumnReverse,
                 ..default()
             },
             color: Color::rgb(0.23, 0.18, 0.05).into(),
@@ -279,6 +319,7 @@ fn game_setup(
         })
         .insert(GameComponent)
         .with_children(|parent| {
+            // section text
             parent.spawn_bundle(
                 TextBundle::from_section(
                     "Seeds",
@@ -293,13 +334,38 @@ fn game_setup(
                     margin: UiRect {
                         left: Val::Auto,
                         right: Val::Auto,
-                        top: Val::Px(5.0),
-                        bottom: Val::Px(5.0),
+                        top: Val::Px(10.0),
+                        bottom: Val::Px(10.0),
+                    },
+                    position: UiRect {
+                        top: Val::Px(TOP_BAR_HEIGHT + 10.0),
+                        ..default()
                     },
                     position_type: PositionType::Absolute,
+                    align_self: AlignSelf::Center,
                     ..default()
                 }),
             );
+
+            // spaces for seeds
+            for i in 0..NUM_SEED_SPACES {
+                parent
+                    .spawn_bundle(NodeBundle {
+                        style: Style {
+                            size: Size::new(Val::Px(SEED_SPACE_WIDTH), Val::Px(SEED_SPACE_HEIGHT)),
+                            position_type: PositionType::Relative,
+                            margin: UiRect::all(Val::Px(SEED_SPACE_MARGIN)),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::FlexEnd,
+                            align_self: AlignSelf::Center,
+                            ..default()
+                        },
+                        color: Color::BLACK.into(),
+                        ..default()
+                    })
+                    .insert(SeedSpace(i))
+                    .insert(Interaction::None);
+            }
         });
 
     // top bar
@@ -313,7 +379,7 @@ fn game_setup(
                     ..default()
                 },
                 justify_content: JustifyContent::Center,
-                align_items: AlignItems::FlexEnd,
+                align_items: AlignItems::Center,
                 ..default()
             },
             color: TOP_BAR_COLOR.into(),
@@ -321,6 +387,7 @@ fn game_setup(
         })
         .insert(GameComponent)
         .with_children(|parent| {
+            // season display
             parent
                 .spawn_bundle(
                     TextBundle::from_section(
@@ -338,6 +405,38 @@ fn game_setup(
                     }),
                 )
                 .insert(SeasonText);
+
+            // help button
+            parent
+                .spawn_bundle(ButtonBundle {
+                    style: Style {
+                        size: Size::new(Val::Px(200.0), Val::Px(TOP_BAR_HEIGHT * 0.8)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::all(Val::Auto),
+                        position_type: PositionType::Absolute,
+                        position: UiRect {
+                            right: Val::Px(5.0),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    color: NORMAL_BUTTON.into(),
+                    // hide the button cuz the help screen shows underneath the other UI for some reason
+                    visibility: Visibility { is_visible: false },
+                    ..default()
+                })
+                .insert(HelpButton)
+                .with_children(|parent| {
+                    parent.spawn_bundle(TextBundle::from_section(
+                        "Help",
+                        TextStyle {
+                            font: main_font.clone(),
+                            font_size: 30.0,
+                            color: Color::SEA_GREEN,
+                        },
+                    ));
+                });
         });
 
     // bottom bar
@@ -359,6 +458,7 @@ fn game_setup(
         })
         .insert(GameComponent)
         .with_children(|parent| {
+            // next season button
             parent
                 .spawn_bundle(ButtonBundle {
                     style: Style {
@@ -375,6 +475,78 @@ fn game_setup(
                 .with_children(|parent| {
                     parent.spawn_bundle(TextBundle::from_section(
                         "Next Season",
+                        TextStyle {
+                            font: main_font.clone(),
+                            font_size: 30.0,
+                            color: Color::SEA_GREEN,
+                        },
+                    ));
+                });
+        });
+
+    // help screen
+    commands
+        .spawn_bundle(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(90.0), Val::Percent(90.0)),
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    top: Val::Px(0.0),
+                    ..default()
+                },
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            color: Color::rgba(0.0, 0.0, 0.0, 0.9).into(),
+            visibility: Visibility { is_visible: false },
+            ..default()
+        })
+        .insert(GameComponent)
+        .insert(HelpScreen)
+        .with_children(|parent| {
+            // help text
+            parent
+                .spawn_bundle(
+                    TextBundle::from_section(
+                        HELP_TEXT,
+                        TextStyle {
+                            font: main_font.clone(),
+                            font_size: 30.0,
+                            color: Color::WHITE,
+                        },
+                    )
+                    .with_text_alignment(TextAlignment::CENTER)
+                    .with_style(Style {
+                        margin: UiRect::all(Val::Auto),
+                        ..default()
+                    }),
+                )
+                .insert(SeasonText);
+
+            // close button
+            parent
+                .spawn_bundle(ButtonBundle {
+                    style: Style {
+                        size: Size::new(Val::Px(50.0), Val::Px(50.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::all(Val::Auto),
+                        position_type: PositionType::Absolute,
+                        position: UiRect {
+                            top: Val::Px(5.0),
+                            right: Val::Px(5.0),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    color: NORMAL_BUTTON.into(),
+                    ..default()
+                })
+                .insert(CloseHelpButton)
+                .with_children(|parent| {
+                    parent.spawn_bundle(TextBundle::from_section(
+                        "X",
                         TextStyle {
                             font: main_font.clone(),
                             font_size: 30.0,
@@ -410,6 +582,22 @@ fn increment_season(
 
     for mut season_text in season_text_query.iter_mut() {
         season_text.sections[0].value = format!("Season {}", season.0);
+    }
+}
+
+type InteractedHelpButtonTuple = (Changed<Interaction>, With<HelpButton>);
+
+/// Handles interactions with the help button
+fn help_button_system(
+    mut help_screen_query: Query<&mut Visibility, With<HelpScreen>>,
+    interaction_query: Query<&Interaction, InteractedHelpButtonTuple>,
+) {
+    for interaction in interaction_query.iter() {
+        if *interaction == Interaction::Clicked {
+            for mut visibility in help_screen_query.iter_mut() {
+                visibility.is_visible = true;
+            }
+        }
     }
 }
 
@@ -549,5 +737,63 @@ fn get_color_for_fruit_color(color: &FruitColor) -> Color {
         FruitColor::Red => Color::RED,
         FruitColor::Purple => Color::PURPLE,
         FruitColor::Yellow => Color::YELLOW,
+    }
+}
+
+fn seed_display_system(
+    seeds: Res<Seeds>,
+    commands: Commands,
+    asset_server: Res<AssetServer>,
+    seed_spaces_query: Query<(Entity, &SeedSpace)>,
+) {
+    if !seeds.is_changed() {
+        return;
+    }
+
+    update_seed_display(seeds, commands, asset_server, seed_spaces_query);
+}
+
+fn update_seed_display(
+    seeds: Res<Seeds>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    seed_spaces_query: Query<(Entity, &SeedSpace)>,
+) {
+    let computer_font = asset_server.load(COMPUTER_FONT);
+
+    for (entity, seed_space) in seed_spaces_query.iter() {
+        let mut entity_commands = commands.entity(entity);
+        entity_commands.despawn_descendants();
+
+        if let Some(seed) = seeds.with_id(seed_space.0) {
+            entity_commands.with_children(|parent| {
+                // seed image
+                parent.spawn_bundle(ImageBundle {
+                    image: asset_server.load("seed.png").into(),
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    focus_policy: FocusPolicy::Pass,
+                    ..default()
+                });
+
+                // seed description
+                parent.spawn_bundle(
+                    TextBundle::from_section(
+                        format!("{} + {}", seed.parent_name_1, seed.parent_name_2),
+                        TextStyle {
+                            font: computer_font.clone(),
+                            font_size: 20.0,
+                            color: Color::GREEN,
+                        },
+                    )
+                    .with_style(Style {
+                        align_self: AlignSelf::FlexStart,
+                        ..default()
+                    }),
+                );
+            });
+        }
     }
 }

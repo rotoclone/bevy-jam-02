@@ -136,9 +136,9 @@ where
 }
 
 pub struct Seed {
-    parent_name_1: String,
-    parent_name_2: String,
-    genes: Vec<Gene>,
+    pub parent_name_1: String,
+    pub parent_name_2: String,
+    pub genes: Vec<Gene>,
 }
 
 pub struct Seeds(pub Vec<Seed>);
