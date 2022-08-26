@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use bevy::{ecs::schedule::ShouldRun, ui::FocusPolicy};
+use bevy::{ecs::schedule::ShouldRun, transform::TransformSystem};
 
 use crate::*;
 
@@ -37,6 +37,13 @@ impl Plugin for GamePlugin {
             .add_system(help_button_system)
             .add_system(plant_display_system.with_run_criteria(is_set_up))
             .add_system(seed_display_system.with_run_criteria(is_set_up))
+            .add_system(being_dragged_system)
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                debug_globaltransform.after(TransformSystem::TransformPropagate),
+            ) //TODO remove
+            .add_system(draggable_pickup_system)
+            .add_system(draggable_drop_system.after(being_dragged_system))
             .insert_resource(SetUp(false))
             .insert_resource(Season(1))
             .insert_resource(generate_starting_plants())
@@ -46,6 +53,13 @@ impl Plugin for GamePlugin {
                 parent_name_2: "some other parent".to_string(),
                 genes: Vec::new(),
             }]));
+    }
+}
+
+//TODO remove
+fn debug_globaltransform(query: Query<&GlobalTransform, With<BeingDragged>>) {
+    for transform in query.iter() {
+        println!("Thing at: {:?}", transform.translation());
     }
 }
 
@@ -89,6 +103,23 @@ impl Seeds {
 
 #[derive(Component)]
 struct PlantInfo(usize);
+
+#[derive(Component)]
+struct PlantImage(usize);
+
+#[derive(Component)]
+struct SeedImage(usize);
+
+#[derive(Component)]
+struct CursorEntity; //TODO remove?
+
+#[derive(Component)]
+struct Draggable;
+
+#[derive(Component)]
+struct BeingDragged {
+    original_position: Vec3,
+}
 
 struct Season(u32);
 
@@ -154,6 +185,11 @@ fn game_setup(
     let main_font = asset_server.load(MAIN_FONT);
     let title_font = asset_server.load(TITLE_FONT);
     let computer_font = asset_server.load(COMPUTER_FONT);
+
+    // cursor entity
+    commands
+        .spawn_bundle(TransformBundle::default())
+        .insert(CursorEntity);
 
     // plants section
     commands
@@ -643,28 +679,34 @@ fn update_plant_display(
             // spawn plant images
             entity_commands.with_children(|parent| {
                 // stem
-                parent.spawn_bundle(ImageBundle {
-                    image: get_image_for_stem_style(&phenotype.stem_style, &asset_server).into(),
-                    color: get_color_for_stem_color(&phenotype.stem_color).into(),
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                parent
+                    .spawn_bundle(ImageBundle {
+                        image: get_image_for_stem_style(&phenotype.stem_style, &asset_server)
+                            .into(),
+                        color: get_color_for_stem_color(&phenotype.stem_color).into(),
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
                         ..default()
-                    },
-                    focus_policy: FocusPolicy::Pass,
-                    ..default()
-                });
+                    })
+                    .insert(Draggable)
+                    .insert(Interaction::None);
 
                 // fruit
-                parent.spawn_bundle(ImageBundle {
-                    image: get_image_for_fruit_style(&phenotype.fruit_style, &asset_server).into(),
-                    color: get_color_for_fruit_color(&phenotype.fruit_color).into(),
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                parent
+                    .spawn_bundle(ImageBundle {
+                        image: get_image_for_fruit_style(&phenotype.fruit_style, &asset_server)
+                            .into(),
+                        color: get_color_for_fruit_color(&phenotype.fruit_color).into(),
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
                         ..default()
-                    },
-                    focus_policy: FocusPolicy::Pass,
-                    ..default()
-                });
+                    })
+                    .insert(Draggable)
+                    .insert(Interaction::None);
             });
 
             // update plant info
@@ -768,15 +810,18 @@ fn update_seed_display(
         if let Some(seed) = seeds.with_id(seed_space.0) {
             entity_commands.with_children(|parent| {
                 // seed image
-                parent.spawn_bundle(ImageBundle {
-                    image: asset_server.load("seed.png").into(),
-                    style: Style {
-                        position_type: PositionType::Absolute,
+                parent
+                    .spawn_bundle(ImageBundle {
+                        image: asset_server.load("seed.png").into(),
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
                         ..default()
-                    },
-                    focus_policy: FocusPolicy::Pass,
-                    ..default()
-                });
+                    })
+                    .insert(SeedImage(seed_space.0))
+                    .insert(Draggable)
+                    .insert(Interaction::None);
 
                 // seed description
                 parent.spawn_bundle(
@@ -794,6 +839,96 @@ fn update_seed_display(
                     }),
                 );
             });
+        }
+    }
+}
+
+/* TODO
+/// Handles updating the position of entities that are being dragged by the mouse.
+fn being_dragged_system(
+    cursor_position: Res<CursorPosition>,
+    mut dragged_query: Query<&mut Transform, With<BeingDragged>>,
+) {
+    if let Some(pos) = cursor_position.0 {
+        for mut transform in dragged_query.iter_mut() {
+            println!("moving a thing to {pos}"); //TODO remove
+            transform.translation.x = pos.x;
+            transform.translation.y = pos.y;
+        }
+    }
+}
+*/
+
+/// Handles updating the position of entities that are being dragged by the mouse.
+fn being_dragged_system(
+    cursor_position: Res<CursorPosition>,
+    window_dimensions: Res<WindowDimensions>,
+    mut dragged_query: Query<(&mut Style, &BeingDragged)>,
+) {
+    if let Some(pos) = cursor_position.0 {
+        for (mut style, being_dragged) in dragged_query.iter_mut() {
+            //TODO remove vvv
+            println!("moving a thing to {pos}");
+            println!("original position: {}", being_dragged.original_position);
+            println!(
+                "window dimensions: {},{}",
+                window_dimensions.0.x, window_dimensions.0.y
+            );
+            //original_pos.x - pos.x = (window.x / 2)
+            //TODO remove ^^^
+            let original_position = upper_left_origin_to_middle_origin(
+                &being_dragged.original_position.truncate(),
+                &window_dimensions.0,
+            );
+            println!("converted original position: {}", original_position); //TODO remove
+            style.position = UiRect {
+                left: Val::Px(pos.x - original_position.x),
+                bottom: Val::Px(pos.y - original_position.y),
+                ..default()
+            };
+            println!(
+                "calculated offset: {},{}",
+                pos.x - original_position.x,
+                pos.y - original_position.y
+            ); //TODO remove
+        }
+    }
+}
+
+fn upper_left_origin_to_middle_origin(coords: &Vec2, window_dimensions: &Vec2) -> Vec2 {
+    let x = coords.x - (window_dimensions.x / 2.0);
+    let y = coords.y - (window_dimensions.y / 2.0);
+
+    Vec2 { x, y }
+}
+
+type InteractedDraggableTuple = (Changed<Interaction>, With<Draggable>);
+
+/// Handles picking up things with the mouse.
+fn draggable_pickup_system(
+    mut commands: Commands,
+    interaction_query: Query<(&Interaction, &GlobalTransform, Entity), InteractedDraggableTuple>,
+) {
+    for (interaction, transform, entity) in interaction_query.iter() {
+        if *interaction == Interaction::Clicked {
+            println!("picked up a thing"); //TODO remove
+            commands.entity(entity).insert(BeingDragged {
+                original_position: transform.translation(),
+            });
+        }
+    }
+}
+
+/// Handles dropping things that are being dragged.
+fn draggable_drop_system(
+    mut commands: Commands,
+    mouse_buttons: Res<Input<MouseButton>>,
+    mut dragged_query: Query<(Entity, &mut Style), With<BeingDragged>>,
+) {
+    if !mouse_buttons.pressed(MouseButton::Left) {
+        for (entity, mut style) in dragged_query.iter_mut() {
+            commands.entity(entity).remove::<BeingDragged>();
+            style.position = UiRect::default();
         }
     }
 }

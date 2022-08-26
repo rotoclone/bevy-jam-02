@@ -8,11 +8,14 @@ pub struct CursorPositionPlugin;
 impl Plugin for CursorPositionPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CursorPosition(None))
+            .insert_resource(WindowDimensions(Vec2::ZERO))
             .add_system_to_stage(CoreStage::PreUpdate, cursor_position_system);
     }
 }
 
 pub struct CursorPosition(pub Option<Vec2>);
+
+pub struct WindowDimensions(pub Vec2);
 
 #[derive(Component)]
 pub struct MainCamera;
@@ -22,6 +25,7 @@ pub struct MainCamera;
 fn cursor_position_system(
     windows: Res<Windows>,
     mut cursor_position: ResMut<CursorPosition>,
+    mut window_dimensions: ResMut<WindowDimensions>,
     query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
     // get the camera info and transform
@@ -34,6 +38,9 @@ fn cursor_position_system(
     } else {
         windows.get_primary().unwrap()
     };
+
+    window_dimensions.0.x = wnd.width();
+    window_dimensions.0.y = wnd.height();
 
     // check if the cursor is inside the window and get its position
     if let Some(screen_pos) = wnd.cursor_position() {
