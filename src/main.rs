@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_inspector_egui::{WorldInspectorParams, WorldInspectorPlugin};
+use bevy_kira_audio::prelude::*;
 
 mod cursor_position;
 use cursor_position::*;
@@ -22,7 +23,7 @@ use lose::*;
 mod plant;
 use plant::*;
 
-const DEV_MODE: bool = true;
+const DEV_MODE: bool = false;
 
 const MAIN_FONT: &str = "fonts/Quicksand-Medium.ttf";
 const TITLE_FONT: &str = "fonts/FredokaOne-Regular.ttf";
@@ -38,6 +39,7 @@ const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
 #[derive(Clone, Eq, PartialEq, Debug, Hash)]
 pub enum GameState {
     Menu,
+    GameLoading,
     Game,
     Win,
     Lose,
@@ -60,7 +62,8 @@ fn main() {
         .add_plugin(WinPlugin)
         .add_plugin(LosePlugin)
         .add_system(button_color_system)
-        .add_plugins(DefaultPlugins);
+        .add_plugins(DefaultPlugins)
+        .add_plugin(AudioPlugin);
 
     if DEV_MODE {
         app.add_system(bevy::window::close_on_esc)

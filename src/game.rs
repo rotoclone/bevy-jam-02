@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use bevy::ecs::schedule::ShouldRun;
+use bevy_asset_loader::prelude::*;
 
 use crate::*;
 
@@ -11,8 +12,8 @@ const BOTTOM_BAR_COLOR: Color = Color::rgba(0.0, 0.0, 0.0, 0.5);
 const BOTTOM_BAR_HEIGHT: f32 = 50.0;
 
 const NUM_PLANT_SPACES: usize = 4;
-const PLANT_SPACE_SIZE: f32 = 200.0;
-const PLANT_SPACE_HEIGHT: f32 = 300.0;
+pub const PLANT_SPACE_SIZE: f32 = 200.0;
+pub const PLANT_SPACE_HEIGHT: f32 = 300.0;
 const PLANT_SPACE_MARGIN: f32 = 10.0;
 
 const NUM_SEED_SPACES: usize = 4;
@@ -25,7 +26,7 @@ const SEED_TOOLTIP_OFFSET: f32 = -15.0;
 const MAX_INTELLIGENCE: usize = 10;
 const MAX_PEST_RESISTANCE: usize = 10;
 
-const GOAL_INTELLIGENCE: i32 = 10;
+pub const GOAL_INTELLIGENCE: i32 = 10;
 
 const HELP_TEXT: &str = include_str!("../assets/help.txt");
 
@@ -41,8 +42,8 @@ const PLANTS_SECTION_START_X: f32 = -(WINDOW_WIDTH / 2.0) + SEEDS_SECTION_WIDTH;
 const SECTION_MARGIN: f32 = 20.0;
 
 const BACKGROUND_LAYER: f32 = 10.0;
-const MIDDLE_LAYER: f32 = 20.0;
-const PLANTS_LAYER: f32 = 30.0;
+pub const MIDDLE_LAYER: f32 = 20.0;
+pub const PLANTS_LAYER: f32 = 30.0;
 const SEEDS_LAYER: f32 = 40.0;
 const TOOLTIP_LAYER: f32 = 50.0;
 
@@ -50,53 +51,118 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_set(SystemSet::on_enter(GameState::Game).with_system(game_setup))
+        app.add_loading_state(
+            LoadingState::new(GameState::GameLoading)
+                .continue_to_state(GameState::Game)
+                .with_collection::<ImageAssets>()
+                .with_collection::<AudioAssets>(),
+        );
+
+        app.add_system_set(SystemSet::on_enter(GameState::GameLoading).with_system(loading_setup))
             .add_system_set(
-                SystemSet::on_exit(GameState::Game)
-                    .with_system(despawn_components_system::<GameComponent>),
-            )
-            .add_system(next_season_button_system)
-            .add_system(help_button_system)
-            .add_system(
-                plant_display_system
-                    .with_run_criteria(is_set_up)
-                    .after(seed_plant_system),
-            )
-            .add_system(
-                seed_display_system
-                    .with_run_criteria(is_set_up)
-                    .after(seed_plant_system),
-            )
-            .add_system(being_dragged_system)
-            .add_system(draggable_pickup_system)
-            .add_system(
-                plant_splice_system
-                    .after(being_dragged_system)
-                    .before(draggable_drop_system),
-            )
-            .add_system(
-                seed_plant_system
-                    .after(being_dragged_system)
-                    .before(draggable_drop_system),
-            )
-            .add_system(draggable_drop_system.after(being_dragged_system))
-            .add_system(seed_tooltip_system.after(draggable_drop_system))
-            .add_system(check_lose_system.with_run_criteria(is_set_up))
-            .add_system(
-                check_win_system
-                    .after(check_lose_system)
-                    .with_run_criteria(is_set_up),
-            )
-            .insert_resource(SetUp(false))
-            .insert_resource(Season(1))
-            .insert_resource(Planters(Vec::new()))
-            .insert_resource(Seeds(Vec::new()))
-            .insert_resource(SmartPlant(None));
+                SystemSet::on_exit(GameState::GameLoading)
+                    .with_system(despawn_components_system::<LoadingComponent>),
+            );
+
+        app.add_system_set(
+            SystemSet::on_enter(GameState::Game)
+                .with_system(game_setup)
+                .with_system(start_background_music),
+        )
+        .add_system_set(
+            SystemSet::on_exit(GameState::Game)
+                .with_system(stop_background_music)
+                .with_system(despawn_components_system::<GameComponent>),
+        )
+        .add_system(next_season_button_system)
+        .add_system(help_button_system)
+        .add_system(
+            plant_display_system
+                .with_run_criteria(is_set_up)
+                .after(seed_plant_system),
+        )
+        .add_system(
+            seed_display_system
+                .with_run_criteria(is_set_up)
+                .after(seed_plant_system),
+        )
+        .add_system(being_dragged_system)
+        .add_system(draggable_pickup_system)
+        .add_system(
+            plant_splice_system
+                .after(being_dragged_system)
+                .before(draggable_drop_system),
+        )
+        .add_system(
+            seed_plant_system
+                .after(being_dragged_system)
+                .before(draggable_drop_system),
+        )
+        .add_system(draggable_drop_system.after(being_dragged_system))
+        .add_system(seed_tooltip_system.after(draggable_drop_system))
+        .add_system(check_lose_system.with_run_criteria(is_set_up))
+        .add_system(
+            check_win_system
+                .after(check_lose_system)
+                .with_run_criteria(is_set_up),
+        )
+        .add_audio_channel::<BackgroundChannel>()
+        .add_audio_channel::<ForegroundChannel>()
+        .insert_resource(SetUp(false))
+        .insert_resource(Season(1))
+        .insert_resource(Planters(Vec::new()))
+        .insert_resource(Seeds(Vec::new()))
+        .insert_resource(SmartPlant(None));
     }
+}
+
+#[derive(AssetCollection)]
+pub struct AudioAssets {
+    #[asset(path = "sounds/game_background_music.ogg")]
+    background_music: Handle<AudioSource>,
+    #[asset(path = "sounds/victory.ogg")]
+    pub victory: Handle<AudioSource>,
+}
+
+#[derive(AssetCollection)]
+pub struct ImageAssets {
+    #[asset(path = "images/fruit_circle.png")]
+    pub fruit_circle: Handle<Image>,
+    #[asset(path = "images/fruit_square.png")]
+    pub fruit_square: Handle<Image>,
+    #[asset(path = "images/fruit_triangle.png")]
+    pub fruit_triangle: Handle<Image>,
+    #[asset(path = "images/stem_angular.png")]
+    pub stem_angular: Handle<Image>,
+    #[asset(path = "images/stem_curvy.png")]
+    pub stem_curvy: Handle<Image>,
+    #[asset(path = "images/stem_loopy.png")]
+    pub stem_loopy: Handle<Image>,
+    #[asset(path = "images/stem_wiggly.png")]
+    pub stem_wiggly: Handle<Image>,
+    #[asset(path = "images/plant_info_space.png")]
+    pub plant_info_space: Handle<Image>,
+    #[asset(path = "images/plant_space.png")]
+    pub plant_space: Handle<Image>,
+    #[asset(path = "images/planted_seed.png")]
+    pub planted_seed: Handle<Image>,
+    #[asset(path = "images/seed_space.png")]
+    pub seed_space: Handle<Image>,
+    #[asset(path = "images/seed_tooltip_background.png")]
+    pub seed_tooltip_background: Handle<Image>,
+    #[asset(path = "images/seed.png")]
+    pub seed: Handle<Image>,
+    #[asset(path = "images/dead_plant.png")]
+    pub dead_plant: Handle<Image>,
+    #[asset(path = "images/glasses.png")]
+    pub glasses: Handle<Image>,
 }
 
 #[derive(Component)]
 struct GameComponent;
+
+#[derive(Component)]
+struct LoadingComponent;
 
 #[derive(Component)]
 struct SeasonText;
@@ -173,6 +239,51 @@ struct SetUp(bool);
 
 pub struct SmartPlant(pub Option<Plant>);
 
+struct BackgroundChannel;
+
+pub struct ForegroundChannel;
+
+/// Sets up the loading screen.
+fn loading_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let title_font = asset_server.load(TITLE_FONT);
+
+    // header text
+    commands
+        .spawn_bundle(NodeBundle {
+            style: Style {
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                position_type: PositionType::Absolute,
+                position: UiRect {
+                    top: Val::Px(0.0),
+                    ..default()
+                },
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::FlexEnd,
+                ..default()
+            },
+            color: UiColor(Color::NONE),
+            ..default()
+        })
+        .insert(LoadingComponent)
+        .with_children(|parent| {
+            parent.spawn_bundle(
+                TextBundle::from_section(
+                    "Loading...",
+                    TextStyle {
+                        font: title_font.clone(),
+                        font_size: 50.0,
+                        color: Color::WHITE,
+                    },
+                )
+                .with_text_alignment(TextAlignment::CENTER)
+                .with_style(Style {
+                    margin: UiRect::all(Val::Auto),
+                    ..default()
+                }),
+            );
+        });
+}
+
 fn generate_starting_plants() -> Planters {
     //TODO generate plant names?
     let plant_1 = Plant {
@@ -237,6 +348,7 @@ fn game_setup(
     mut seeds: ResMut<Seeds>,
     mut smart_plant: ResMut<SmartPlant>,
     mut set_up: ResMut<SetUp>,
+    image_assets: Res<ImageAssets>,
 ) {
     let main_font = asset_server.load(MAIN_FONT);
     let title_font = asset_server.load(TITLE_FONT);
@@ -293,7 +405,7 @@ fn game_setup(
         // space for plant info
         commands
             .spawn_bundle(SpriteBundle {
-                texture: asset_server.load("plant_info_space.png"),
+                texture: image_assets.plant_info_space.clone(),
                 transform: Transform {
                     translation: Vec3::new(x_coord, plant_info_y_coord, MIDDLE_LAYER),
                     ..default()
@@ -326,7 +438,7 @@ fn game_setup(
         // space for plant
         commands
             .spawn_bundle(SpriteBundle {
-                texture: asset_server.load("plant_space.png"),
+                texture: image_assets.plant_space.clone(),
                 transform: Transform {
                     translation: Vec3::new(
                         x_coord,
@@ -385,7 +497,7 @@ fn game_setup(
         // space for seed
         commands
             .spawn_bundle(SpriteBundle {
-                texture: asset_server.load("seed_space.png"),
+                texture: image_assets.seed_space.clone(),
                 transform: Transform {
                     translation: Vec3::new(
                         SEEDS_SECTION_START_X + (SEEDS_SECTION_WIDTH / 2.0),
@@ -591,6 +703,24 @@ fn game_setup(
     set_up.0 = true;
 }
 
+fn start_background_music(
+    audio_assets: Res<AudioAssets>,
+    audio: Res<AudioChannel<BackgroundChannel>>,
+) {
+    audio
+        .play(audio_assets.background_music.clone())
+        .fade_in(AudioTween::new(
+            Duration::from_secs(5),
+            AudioEasing::OutPowi(2),
+        ))
+        .with_volume(0.5)
+        .looped();
+}
+
+fn stop_background_music(audio: Res<AudioChannel<BackgroundChannel>>) {
+    audio.stop();
+}
+
 type InteractedNextSeasonButtonTuple = (Changed<Interaction>, With<NextSeasonButton>);
 
 /// Handles interactions with the next season button.
@@ -638,7 +768,7 @@ fn help_button_system(
 fn plant_display_system(
     planters: Res<Planters>,
     commands: Commands,
-    asset_server: Res<AssetServer>,
+    image_assets: Res<ImageAssets>,
     plant_spaces_query: Query<(&Transform, &PlantSpace)>,
     plant_images_query: Query<Entity, With<PlantImage>>,
     plant_info_query: Query<(&mut Text, &PlantInfo)>,
@@ -650,7 +780,7 @@ fn plant_display_system(
     update_plant_display(
         planters,
         commands,
-        asset_server,
+        image_assets,
         plant_spaces_query,
         plant_images_query,
         plant_info_query,
@@ -660,7 +790,7 @@ fn plant_display_system(
 fn update_plant_display(
     planters: Res<Planters>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    image_assets: Res<ImageAssets>,
     plant_spaces_query: Query<(&Transform, &PlantSpace)>,
     plant_images_query: Query<Entity, With<PlantImage>>,
     mut plant_info_query: Query<(&mut Text, &PlantInfo)>,
@@ -680,62 +810,14 @@ fn update_plant_display(
                 Planter::Plant(plant) => {
                     let phenotype = plant.get_phenotype();
 
-                    // spawn plant images
-                    commands
-                        .spawn_bundle(SpriteBundle {
-                            sprite: Sprite {
-                                custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
-                                color: Color::NONE,
-                                ..default()
-                            },
-                            transform: Transform {
-                                translation: Vec3::new(
-                                    transform.translation.x,
-                                    transform.translation.y
-                                        + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
-                                    PLANTS_LAYER,
-                                ),
-                                ..default()
-                            },
-                            ..default()
-                        })
-                        .insert(GameComponent)
-                        .insert(PlantImage(plant_space.0))
-                        .insert(Draggable)
-                        .insert(Interactable {
-                            size: Vec2::new(200.0, 200.0),
-                        })
-                        .with_children(|parent| {
-                            // stem
-                            parent.spawn_bundle(SpriteBundle {
-                                texture: get_image_for_stem_style(
-                                    &phenotype.stem_style,
-                                    &asset_server,
-                                ),
-                                sprite: Sprite {
-                                    color: get_color_for_stem_color(&phenotype.stem_color),
-                                    ..default()
-                                },
-                                ..default()
-                            });
-
-                            // fruit
-                            parent.spawn_bundle(SpriteBundle {
-                                texture: get_image_for_fruit_style(
-                                    &phenotype.fruit_style,
-                                    &asset_server,
-                                ),
-                                sprite: Sprite {
-                                    color: get_color_for_fruit_color(&phenotype.fruit_color),
-                                    ..default()
-                                },
-                                transform: Transform {
-                                    translation: Vec3::new(0.0, 0.0, 1.0),
-                                    ..default()
-                                },
-                                ..default()
-                            });
-                        });
+                    spawn_plant_image(
+                        &mut commands,
+                        &transform,
+                        &phenotype,
+                        &image_assets,
+                        plant_space.0,
+                        GameComponent,
+                    );
 
                     // update plant info
                     if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
@@ -746,7 +828,7 @@ fn update_plant_display(
                         let intelligence = if phenotype.intelligence < 0 {
                             0
                         } else {
-                            phenotype.intelligence as usize
+                            MAX_INTELLIGENCE.min(phenotype.intelligence as usize)
                         };
                         let intelligence_filled_bar = "#".repeat(intelligence);
                         let intelligence_empty_bar =
@@ -758,7 +840,7 @@ fn update_plant_display(
                         let pest_resistance = if phenotype.pest_resistance < 0 {
                             0
                         } else {
-                            phenotype.pest_resistance as usize
+                            MAX_PEST_RESISTANCE.min(phenotype.pest_resistance as usize)
                         };
                         let pest_resistance_filled_bar = "#".repeat(pest_resistance);
                         let pest_resistance_empty_bar =
@@ -798,7 +880,7 @@ fn update_plant_display(
                         })
                         .with_children(|parent| {
                             parent.spawn_bundle(SpriteBundle {
-                                texture: asset_server.load("dead_plant.png"),
+                                texture: image_assets.dead_plant.clone(),
                                 ..default()
                             });
                         });
@@ -836,7 +918,7 @@ fn update_plant_display(
                         })
                         .with_children(|parent| {
                             parent.spawn_bundle(SpriteBundle {
-                                texture: asset_server.load("planted_seed.png"),
+                                texture: image_assets.planted_seed.clone(),
                                 ..default()
                             });
                         });
@@ -855,25 +937,80 @@ fn update_plant_display(
     }
 }
 
-fn get_image_for_stem_style(style: &StemStyle, asset_server: &Res<AssetServer>) -> Handle<Image> {
-    let file_name = match style {
-        StemStyle::Curvy => "stem_curvy.png",
-        StemStyle::Loopy => "stem_loopy.png",
-        StemStyle::Angular => "stem_angular.png",
-        StemStyle::Wiggly => "stem_wiggly.png",
-    };
+pub fn spawn_plant_image(
+    commands: &mut Commands,
+    plant_space_transform: &Transform,
+    phenotype: &Phenotype,
+    image_assets: &Res<ImageAssets>,
+    plant_id: usize,
+    component: impl Component,
+) {
+    commands
+        .spawn_bundle(SpriteBundle {
+            sprite: Sprite {
+                custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
+                color: Color::NONE,
+                ..default()
+            },
+            transform: Transform {
+                translation: Vec3::new(
+                    plant_space_transform.translation.x,
+                    plant_space_transform.translation.y
+                        + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
+                    PLANTS_LAYER,
+                ),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(component)
+        .insert(PlantImage(plant_id))
+        .insert(Draggable)
+        .insert(Interactable {
+            size: Vec2::new(200.0, 200.0),
+        })
+        .with_children(|parent| {
+            // stem
+            parent.spawn_bundle(SpriteBundle {
+                texture: get_image_for_stem_style(&phenotype.stem_style, &image_assets),
+                sprite: Sprite {
+                    color: get_color_for_stem_color(&phenotype.stem_color),
+                    ..default()
+                },
+                ..default()
+            });
 
-    asset_server.load(file_name)
+            // fruit
+            parent.spawn_bundle(SpriteBundle {
+                texture: get_image_for_fruit_style(&phenotype.fruit_style, &image_assets),
+                sprite: Sprite {
+                    color: get_color_for_fruit_color(&phenotype.fruit_color),
+                    ..default()
+                },
+                transform: Transform {
+                    translation: Vec3::new(0.0, 0.0, 1.0),
+                    ..default()
+                },
+                ..default()
+            });
+        });
 }
 
-fn get_image_for_fruit_style(style: &FruitStyle, asset_server: &Res<AssetServer>) -> Handle<Image> {
-    let file_name = match style {
-        FruitStyle::Circle => "fruit_circle.png",
-        FruitStyle::Square => "fruit_square.png",
-        FruitStyle::Triangle => "fruit_triangle.png",
-    };
+fn get_image_for_stem_style(style: &StemStyle, image_assets: &Res<ImageAssets>) -> Handle<Image> {
+    match style {
+        StemStyle::Curvy => image_assets.stem_curvy.clone(),
+        StemStyle::Loopy => image_assets.stem_loopy.clone(),
+        StemStyle::Angular => image_assets.stem_angular.clone(),
+        StemStyle::Wiggly => image_assets.stem_wiggly.clone(),
+    }
+}
 
-    asset_server.load(file_name)
+fn get_image_for_fruit_style(style: &FruitStyle, image_assets: &Res<ImageAssets>) -> Handle<Image> {
+    match style {
+        FruitStyle::Circle => image_assets.fruit_circle.clone(),
+        FruitStyle::Square => image_assets.fruit_square.clone(),
+        FruitStyle::Triangle => image_assets.fruit_triangle.clone(),
+    }
 }
 
 fn get_color_for_stem_color(color: &StemColor) -> Color {
@@ -896,6 +1033,7 @@ fn seed_display_system(
     seeds: Res<Seeds>,
     commands: Commands,
     asset_server: Res<AssetServer>,
+    image_assets: Res<ImageAssets>,
     seed_images_query: Query<Entity, With<SeedImage>>,
     seed_info_query: Query<Entity, With<SeedInfo>>,
     seed_spaces_query: Query<(&Transform, &SeedSpace)>,
@@ -908,6 +1046,7 @@ fn seed_display_system(
         seeds,
         commands,
         asset_server,
+        image_assets,
         seed_images_query,
         seed_info_query,
         seed_spaces_query,
@@ -918,6 +1057,7 @@ fn update_seed_display(
     seeds: Res<Seeds>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    image_assets: Res<ImageAssets>,
     seed_images_query: Query<Entity, With<SeedImage>>,
     seed_info_query: Query<Entity, With<SeedInfo>>,
     seed_spaces_query: Query<(&Transform, &SeedSpace)>,
@@ -937,7 +1077,7 @@ fn update_seed_display(
             // seed image
             commands
                 .spawn_bundle(SpriteBundle {
-                    texture: asset_server.load("seed.png"),
+                    texture: image_assets.seed.clone(),
                     transform: Transform {
                         translation: Vec3::new(
                             transform.translation.x,
@@ -958,7 +1098,7 @@ fn update_seed_display(
             // seed info
             commands
                 .spawn_bundle(SpriteBundle {
-                    texture: asset_server.load("seed_tooltip_background.png"),
+                    texture: image_assets.seed_tooltip_background.clone(),
                     transform: Transform {
                         translation: Vec3::new(
                             transform.translation.x

@@ -113,7 +113,7 @@ fn start_button_system(
 ) {
     for interaction in interaction_query.iter() {
         if *interaction == Interaction::Clicked {
-            game_state.set(GameState::Game).unwrap();
+            game_state.set(GameState::GameLoading).unwrap();
         }
     }
 }

@@ -3,7 +3,7 @@ use rand::{seq::SliceRandom, Rng};
 use crate::*;
 
 const PEST_DESTRUCTION_THRESHOLD: i32 = 5;
-const PEST_DESTRUCTION_CHANCE: f32 = 0.1;
+const PEST_DESTRUCTION_CHANCE: f32 = 0.18;
 
 #[derive(Clone)]
 pub struct PlantName {
@@ -315,7 +315,10 @@ where
         .map(|gene| (*gene).clone())
         .unwrap_or(default_gene);
 
-    vec![gene_1, gene_2]
+    let mut genes = vec![gene_1, gene_2];
+    genes.shuffle(&mut rng);
+
+    genes
 }
 
 pub struct Seed {
@@ -414,7 +417,7 @@ impl Gene {
             }
             StemStyle::Angular => {
                 dominance = GeneDominance::Recessive;
-                intelligence_effect = 5;
+                intelligence_effect = 4;
                 pest_resistance_effect = -1;
             }
             StemStyle::Wiggly => {
@@ -449,7 +452,7 @@ impl Gene {
             }
             StemColor::Blue => {
                 dominance = GeneDominance::Recessive;
-                intelligence_effect = 5;
+                intelligence_effect = 4;
                 pest_resistance_effect = -1;
             }
         }
