@@ -1,7 +1,76 @@
+use rand::{seq::SliceRandom, Rng};
+
 use crate::*;
 
+const PEST_DESTRUCTION_THRESHOLD: i32 = 5;
+const PEST_DESTRUCTION_CHANCE: f32 = 0.1;
+
+#[derive(Clone)]
+pub struct PlantName {
+    syllables: Vec<String>,
+}
+
+impl<T: std::fmt::Display> From<Vec<T>> for PlantName {
+    fn from(vec: Vec<T>) -> Self {
+        PlantName {
+            syllables: vec.iter().map(|s| s.to_string().to_lowercase()).collect(),
+        }
+    }
+}
+
+impl PlantName {
+    pub fn new(syllables: Vec<String>) -> PlantName {
+        syllables.into()
+    }
+}
+
+impl std::fmt::Display for PlantName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", uppercase_first_letter(&self.syllables.concat()))
+    }
+}
+
+fn uppercase_first_letter(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+    }
+}
+
+/// Combines the provided names into a new name with syllables from both.
+pub fn combine_names(name_1: &PlantName, name_2: &PlantName) -> PlantName {
+    let num_syllables = name_1.syllables.len().max(name_2.syllables.len());
+    let mut rng = rand::thread_rng();
+    let mut syllables = Vec::new();
+
+    if let Some(syllable) = name_1.syllables.choose(&mut rng) {
+        syllables.push(syllable);
+    }
+
+    if let Some(syllable) = name_2.syllables.choose(&mut rng) {
+        syllables.push(syllable);
+    }
+
+    let all_syllables = name_1
+        .syllables
+        .iter()
+        .chain(name_2.syllables.iter())
+        .collect::<Vec<&String>>();
+    while syllables.len() < num_syllables {
+        if let Some(syllable) = all_syllables.choose(&mut rng) {
+            syllables.push(syllable);
+        } else {
+            break;
+        }
+    }
+
+    syllables.into()
+}
+
+#[derive(Clone)]
 pub struct Plant {
-    pub name: String,
+    pub name: PlantName,
     pub genes: Vec<Gene>,
 }
 
@@ -12,6 +81,32 @@ pub enum Planter {
     DeadPlant(Plant),
     Seed(Seed),
     Empty,
+}
+
+impl Planters {
+    /// Updates the planters for next season.
+    pub fn next_season(&mut self) {
+        // grow seeds
+        self.0.iter_mut().for_each(|planter| {
+            if let Planter::Seed(seed) = planter {
+                *planter = Planter::Plant(seed.grow())
+            }
+        });
+
+        // unleash the pests
+        self.0.iter_mut().for_each(|planter| {
+            if let Planter::Plant(plant) = planter {
+                let phenotype = plant.get_phenotype();
+                if phenotype.pest_resistance < PEST_DESTRUCTION_THRESHOLD {
+                    let difference = PEST_DESTRUCTION_THRESHOLD - phenotype.pest_resistance;
+                    let destruction_chance = difference as f32 * PEST_DESTRUCTION_CHANCE;
+                    if rand::thread_rng().gen::<f32>() <= destruction_chance {
+                        *planter = Planter::DeadPlant(plant.clone())
+                    }
+                }
+            }
+        });
+    }
 }
 
 pub struct Phenotype {
@@ -152,13 +247,24 @@ where
 }
 
 pub struct Seed {
-    pub parent_name_1: String,
-    pub parent_name_2: String,
+    pub parent_name_1: PlantName,
+    pub parent_name_2: PlantName,
     pub genes: Vec<Gene>,
+}
+
+impl Seed {
+    /// Turns this seed into a plant.
+    pub fn grow(&self) -> Plant {
+        Plant {
+            name: combine_names(&self.parent_name_1, &self.parent_name_2),
+            genes: self.genes.clone(),
+        }
+    }
 }
 
 pub struct Seeds(pub Vec<Seed>);
 
+#[derive(Clone)]
 pub struct Gene {
     category: GeneCategory,
     dominance: GeneDominance,
@@ -172,7 +278,7 @@ pub enum GeneDominance {
     Recessive,
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone, Copy)]
 pub enum GeneCategory {
     StemStyle(StemStyle),
     StemColor(StemColor),

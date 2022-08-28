@@ -16,6 +16,9 @@ use game::*;
 mod win;
 use win::*;
 
+mod lose;
+use lose::*;
+
 mod plant;
 use plant::*;
 
@@ -36,7 +39,8 @@ const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
 pub enum GameState {
     Menu,
     Game,
-    End,
+    Win,
+    Lose,
 }
 
 fn main() {
@@ -53,7 +57,8 @@ fn main() {
         .add_plugin(CursorPositionPlugin)
         .add_plugin(MenuPlugin)
         .add_plugin(GamePlugin)
-        .add_plugin(EndPlugin)
+        .add_plugin(WinPlugin)
+        .add_plugin(LosePlugin)
         .add_system(button_color_system)
         .add_plugins(DefaultPlugins);
 

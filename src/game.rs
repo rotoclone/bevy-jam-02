@@ -25,6 +25,8 @@ const SEED_TOOLTIP_OFFSET: f32 = -15.0;
 const MAX_INTELLIGENCE: usize = 10;
 const MAX_PEST_RESISTANCE: usize = 10;
 
+const GOAL_INTELLIGENCE: i32 = 10;
+
 const HELP_TEXT: &str = include_str!("../assets/help.txt");
 
 const SEEDS_SECTION_WIDTH: f32 = WINDOW_WIDTH * 0.25;
@@ -79,15 +81,12 @@ impl Plugin for GamePlugin {
             )
             .add_system(draggable_drop_system.after(being_dragged_system))
             .add_system(seed_tooltip_system.after(draggable_drop_system))
+            .add_system(check_lose_system)
+            .add_system(check_win_system.after(check_lose_system))
             .insert_resource(SetUp(false))
             .insert_resource(Season(1))
             .insert_resource(generate_starting_plants())
-            // TODO .insert_resource(Seeds(Vec::new()));
-            .insert_resource(Seeds(vec![Seed {
-                parent_name_1: "some parent".to_string(),
-                parent_name_2: "some other parent".to_string(),
-                genes: Vec::new(),
-            }]));
+            .insert_resource(Seeds(Vec::new()));
     }
 }
 
@@ -170,7 +169,7 @@ struct SetUp(bool);
 fn generate_starting_plants() -> Planters {
     //TODO generate plant names?
     let plant_1 = Plant {
-        name: "Roberto".to_string(),
+        name: vec!["ro", "ber", "to"].into(),
         genes: vec![
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Green)),
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Brown)),
@@ -184,7 +183,7 @@ fn generate_starting_plants() -> Planters {
     };
 
     let plant_2 = Plant {
-        name: "Jessica".to_string(),
+        name: vec!["jes", "si", "ca"].into(),
         genes: vec![
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Brown)),
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Blue)),
@@ -198,7 +197,7 @@ fn generate_starting_plants() -> Planters {
     };
 
     let plant_3 = Plant {
-        name: "Francine".to_string(),
+        name: vec!["gre", "go", "ry"].into(),
         genes: vec![
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Green)),
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Blue)),
@@ -575,10 +574,12 @@ fn next_season_button_system(
     mut season: ResMut<Season>,
     mut season_text_query: Query<&mut Text, With<SeasonText>>,
     interaction_query: Query<&Interaction, InteractedNextSeasonButtonTuple>,
+    mut planters: ResMut<Planters>,
 ) {
     for interaction in interaction_query.iter() {
         if *interaction == Interaction::Clicked {
-            increment_season(&mut season, &mut season_text_query)
+            increment_season(&mut season, &mut season_text_query);
+            planters.next_season();
         }
     }
 }
@@ -778,7 +779,8 @@ fn update_plant_display(
 
                     // update plant info
                     if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
-                        text.sections[0].value = format!("RIP {}\nEaten by pests", dead_plant.name);
+                        text.sections[0].value =
+                            format!("RIP {}\n\nEaten by pests", dead_plant.name);
                     }
                 }
                 Planter::Seed(seed) => {
@@ -1127,5 +1129,38 @@ fn draggable_drop_system(
             transform.translation = being_dragged.original_position;
             commands.entity(entity).remove::<BeingDragged>();
         }
+    }
+}
+
+/// Moves to the win state if the player has won
+fn check_win_system(planters: Res<Planters>, mut game_state: ResMut<State<GameState>>) {
+    let has_smart_plant = planters.0.iter().any(|planter| {
+        if let Planter::Plant(plant) = planter {
+            plant.get_phenotype().intelligence >= GOAL_INTELLIGENCE as i32
+        } else {
+            false
+        }
+    });
+
+    if has_smart_plant {
+        game_state.overwrite_set(GameState::Win).unwrap();
+    }
+}
+
+/// Moves to the lose state if the player has lost
+fn check_lose_system(
+    planters: Res<Planters>,
+    seeds: Res<Seeds>,
+    mut game_state: ResMut<State<GameState>>,
+) {
+    let has_plant_or_planted_seed = planters
+        .0
+        .iter()
+        .any(|planter| matches!(planter, Planter::Plant(_)) || matches!(planter, Planter::Seed(_)));
+
+    let has_seed = !seeds.0.is_empty();
+
+    if !has_plant_or_planted_seed && !has_seed {
+        game_state.overwrite_set(GameState::Lose).unwrap();
     }
 }
