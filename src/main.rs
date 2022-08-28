@@ -25,6 +25,9 @@ const MAIN_FONT: &str = "fonts/Quicksand-Medium.ttf";
 const TITLE_FONT: &str = "fonts/FredokaOne-Regular.ttf";
 const COMPUTER_FONT: &str = "fonts/VT323-Regular.ttf";
 
+const WINDOW_WIDTH: f32 = 1280.0;
+const WINDOW_HEIGHT: f32 = 720.0;
+
 const NORMAL_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 const HOVERED_BUTTON: Color = Color::rgb(0.35, 0.35, 0.35);
 const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
@@ -41,8 +44,8 @@ fn main() {
     app.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(WindowDescriptor {
             title: "Mr. Smartyplants".to_string(),
-            width: 1280.0,
-            height: 720.0,
+            width: WINDOW_WIDTH,
+            height: WINDOW_HEIGHT,
             ..default()
         })
         .add_state(GameState::Menu)
@@ -70,7 +73,6 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    // camera
     commands
         .spawn_bundle(Camera2dBundle::default())
         .insert(MainCamera);
