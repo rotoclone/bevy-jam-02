@@ -90,7 +90,8 @@ impl Plugin for GamePlugin {
             .insert_resource(SetUp(false))
             .insert_resource(Season(1))
             .insert_resource(Planters(Vec::new()))
-            .insert_resource(Seeds(Vec::new()));
+            .insert_resource(Seeds(Vec::new()))
+            .insert_resource(SmartPlant(None));
     }
 }
 
@@ -166,9 +167,11 @@ struct BeingDragged {
     original_position: Vec3,
 }
 
-struct Season(u32);
+pub struct Season(pub u32);
 
 struct SetUp(bool);
+
+pub struct SmartPlant(pub Option<Plant>);
 
 fn generate_starting_plants() -> Planters {
     //TODO generate plant names?
@@ -201,7 +204,7 @@ fn generate_starting_plants() -> Planters {
     };
 
     let plant_3 = Plant {
-        name: vec!["gre", "go", "ry"].into(),
+        name: vec!["mal", "lo", "ry"].into(),
         genes: vec![
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Green)),
             Gene::new_with_category(GeneCategory::StemColor(StemColor::Blue)),
@@ -232,6 +235,7 @@ fn game_setup(
     mut season: ResMut<Season>,
     mut planters: ResMut<Planters>,
     mut seeds: ResMut<Seeds>,
+    mut smart_plant: ResMut<SmartPlant>,
     mut set_up: ResMut<SetUp>,
 ) {
     let main_font = asset_server.load(MAIN_FONT);
@@ -241,6 +245,7 @@ fn game_setup(
     season.0 = 1;
     *planters = generate_starting_plants();
     *seeds = Seeds(Vec::new());
+    smart_plant.0 = None;
 
     //
     // plants section
@@ -352,7 +357,7 @@ fn game_setup(
             text: Text::from_section(
                 "Seeds",
                 TextStyle {
-                    font: title_font.clone(),
+                    font: title_font,
                     font_size: 40.0,
                     color: Color::WHITE,
                 },
@@ -1160,11 +1165,17 @@ fn draggable_drop_system(
 fn check_win_system(
     planters: Res<Planters>,
     mut set_up: ResMut<SetUp>,
+    mut smart_plant: ResMut<SmartPlant>,
     mut game_state: ResMut<State<GameState>>,
 ) {
     let has_smart_plant = planters.0.iter().any(|planter| {
         if let Planter::Plant(plant) = planter {
-            plant.get_phenotype().intelligence >= GOAL_INTELLIGENCE as i32
+            if plant.get_phenotype().intelligence >= GOAL_INTELLIGENCE as i32 {
+                smart_plant.0 = Some(plant.clone());
+                true
+            } else {
+                false
+            }
         } else {
             false
         }

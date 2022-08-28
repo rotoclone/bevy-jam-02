@@ -18,12 +18,6 @@ impl<T: std::fmt::Display> From<Vec<T>> for PlantName {
     }
 }
 
-impl PlantName {
-    pub fn new(syllables: Vec<String>) -> PlantName {
-        syllables.into()
-    }
-}
-
 impl std::fmt::Display for PlantName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", uppercase_first_letter(&self.syllables.concat()))
@@ -206,15 +200,6 @@ impl Plant {
     }
 }
 
-/// Splices together the genes of 2 plants
-pub fn splice_plants(plant_1: &Plant, plant_2: &Plant) -> Seed {
-    Seed {
-        parent_name_1: plant_1.name.clone(),
-        parent_name_2: plant_2.name.clone(),
-        genes: vec![], //TODO
-    }
-}
-
 fn get_expressed_gene<'a, F>(
     genes: &'a [Gene],
     category_filter: F,
@@ -244,6 +229,93 @@ where
         .iter()
         .filter(|gene| gene.dominance == dominance && additional_filter(gene))
         .collect::<Vec<&Gene>>()
+}
+
+/// Splices together the genes of 2 plants
+pub fn splice_plants(plant_1: &Plant, plant_2: &Plant) -> Seed {
+    Seed {
+        parent_name_1: plant_1.name.clone(),
+        parent_name_2: plant_2.name.clone(),
+        genes: splice_genes(&plant_1.genes, &plant_2.genes),
+    }
+}
+
+fn splice_genes(genes_1: &[Gene], genes_2: &[Gene]) -> Vec<Gene> {
+    let mut genes = Vec::new();
+
+    // stem style
+    let default_stem_style_gene = Gene::new_with_stem_style(StemStyle::Curvy);
+    let stem_style_genes = get_spliced_genes(
+        genes_1,
+        genes_2,
+        |gene| matches!(gene.category, GeneCategory::StemStyle(_)),
+        default_stem_style_gene,
+    );
+    genes.extend(stem_style_genes);
+
+    // stem color
+    let default_stem_color_gene = Gene::new_with_stem_color(StemColor::Green);
+    let stem_color_genes = get_spliced_genes(
+        genes_1,
+        genes_2,
+        |gene| matches!(gene.category, GeneCategory::StemColor(_)),
+        default_stem_color_gene,
+    );
+    genes.extend(stem_color_genes);
+
+    // fruit style
+    let default_fruit_style_gene = Gene::new_with_fruit_style(FruitStyle::Circle);
+    let fruit_style_genes = get_spliced_genes(
+        genes_1,
+        genes_2,
+        |gene| matches!(gene.category, GeneCategory::FruitStyle(_)),
+        default_fruit_style_gene,
+    );
+    genes.extend(fruit_style_genes);
+
+    // fruit color
+    let default_fruit_color_gene = Gene::new_with_fruit_color(FruitColor::Red);
+    let fruit_color_genes = get_spliced_genes(
+        genes_1,
+        genes_2,
+        |gene| matches!(gene.category, GeneCategory::FruitColor(_)),
+        default_fruit_color_gene,
+    );
+    genes.extend(fruit_color_genes);
+
+    genes
+}
+
+fn get_spliced_genes<F>(
+    genes_1: &[Gene],
+    genes_2: &[Gene],
+    category_filter: F,
+    default_gene: Gene,
+) -> Vec<Gene>
+where
+    F: Fn(&Gene) -> bool,
+{
+    let found_genes_1 = genes_1
+        .iter()
+        .filter(|gene| category_filter(gene))
+        .collect::<Vec<&Gene>>();
+    let found_genes_2 = genes_2
+        .iter()
+        .filter(|gene| category_filter(gene))
+        .collect::<Vec<&Gene>>();
+
+    let mut rng = rand::thread_rng();
+
+    let gene_1 = found_genes_1
+        .choose(&mut rng)
+        .map(|gene| (*gene).clone())
+        .unwrap_or_else(|| default_gene.clone());
+    let gene_2 = found_genes_2
+        .choose(&mut rng)
+        .map(|gene| (*gene).clone())
+        .unwrap_or(default_gene);
+
+    vec![gene_1, gene_2]
 }
 
 pub struct Seed {

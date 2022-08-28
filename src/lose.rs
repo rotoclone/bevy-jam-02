@@ -59,7 +59,7 @@ fn lose_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             );
         });
 
-    // start button
+    // restart button
     commands
         .spawn_bundle(NodeBundle {
             style: Style {
