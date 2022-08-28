@@ -81,11 +81,15 @@ impl Plugin for GamePlugin {
             )
             .add_system(draggable_drop_system.after(being_dragged_system))
             .add_system(seed_tooltip_system.after(draggable_drop_system))
-            .add_system(check_lose_system)
-            .add_system(check_win_system.after(check_lose_system))
+            .add_system(check_lose_system.with_run_criteria(is_set_up))
+            .add_system(
+                check_win_system
+                    .after(check_lose_system)
+                    .with_run_criteria(is_set_up),
+            )
             .insert_resource(SetUp(false))
             .insert_resource(Season(1))
-            .insert_resource(generate_starting_plants())
+            .insert_resource(Planters(Vec::new()))
             .insert_resource(Seeds(Vec::new()));
     }
 }
@@ -225,12 +229,18 @@ fn is_set_up(set_up: Res<SetUp>) -> ShouldRun {
 fn game_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    season: Res<Season>,
+    mut season: ResMut<Season>,
+    mut planters: ResMut<Planters>,
+    mut seeds: ResMut<Seeds>,
     mut set_up: ResMut<SetUp>,
 ) {
     let main_font = asset_server.load(MAIN_FONT);
     let title_font = asset_server.load(TITLE_FONT);
     let computer_font = asset_server.load(COMPUTER_FONT);
+
+    season.0 = 1;
+    *planters = generate_starting_plants();
+    *seeds = Seeds(Vec::new());
 
     //
     // plants section
@@ -242,26 +252,28 @@ fn game_setup(
     let plants_section_center_x = PLANTS_SECTION_START_X + (PLANTS_SECTION_WIDTH / 2.0);
 
     // section text
-    commands.spawn_bundle(Text2dBundle {
-        text: Text::from_section(
-            "Plants",
-            TextStyle {
-                font: title_font.clone(),
-                font_size: 40.0,
-                color: Color::WHITE,
+    commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::from_section(
+                "Plants",
+                TextStyle {
+                    font: title_font.clone(),
+                    font_size: 40.0,
+                    color: Color::WHITE,
+                },
+            )
+            .with_alignment(TextAlignment::CENTER),
+            transform: Transform {
+                translation: Vec3::new(
+                    plants_section_center_x,
+                    (PLANTS_SECTION_HEIGHT / 2.0) - SECTION_MARGIN,
+                    MIDDLE_LAYER,
+                ),
+                ..default()
             },
-        )
-        .with_alignment(TextAlignment::CENTER),
-        transform: Transform {
-            translation: Vec3::new(
-                plants_section_center_x,
-                (PLANTS_SECTION_HEIGHT / 2.0) - SECTION_MARGIN,
-                MIDDLE_LAYER,
-            ),
             ..default()
-        },
-        ..default()
-    });
+        })
+        .insert(GameComponent);
 
     let plant_spaces_start = plants_section_center_x
         - (((PLANT_SPACE_MARGIN + PLANT_SPACE_SIZE) * NUM_PLANT_SPACES as f32) / 2.0);
@@ -274,14 +286,16 @@ fn game_setup(
         let plant_info_y_coord = (PLANT_SPACE_MARGIN / 2.0) + (PLANT_SPACE_SIZE / 2.0);
 
         // space for plant info
-        commands.spawn_bundle(SpriteBundle {
-            texture: asset_server.load("plant_info_space.png"),
-            transform: Transform {
-                translation: Vec3::new(x_coord, plant_info_y_coord, MIDDLE_LAYER),
+        commands
+            .spawn_bundle(SpriteBundle {
+                texture: asset_server.load("plant_info_space.png"),
+                transform: Transform {
+                    translation: Vec3::new(x_coord, plant_info_y_coord, MIDDLE_LAYER),
+                    ..default()
+                },
                 ..default()
-            },
-            ..default()
-        });
+            })
+            .insert(GameComponent);
 
         // plant info
         commands
@@ -301,6 +315,7 @@ fn game_setup(
                 },
                 ..default()
             })
+            .insert(GameComponent)
             .insert(PlantInfo(i));
 
         // space for plant
@@ -317,6 +332,7 @@ fn game_setup(
                 },
                 ..default()
             })
+            .insert(GameComponent)
             .insert(PlantSpace(i))
             .insert(Interactable {
                 size: Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_HEIGHT),
@@ -331,26 +347,28 @@ fn game_setup(
     //TODO
 
     // section text
-    commands.spawn_bundle(Text2dBundle {
-        text: Text::from_section(
-            "Seeds",
-            TextStyle {
-                font: title_font.clone(),
-                font_size: 40.0,
-                color: Color::WHITE,
+    commands
+        .spawn_bundle(Text2dBundle {
+            text: Text::from_section(
+                "Seeds",
+                TextStyle {
+                    font: title_font.clone(),
+                    font_size: 40.0,
+                    color: Color::WHITE,
+                },
+            )
+            .with_alignment(TextAlignment::CENTER),
+            transform: Transform {
+                translation: Vec3::new(
+                    SEEDS_SECTION_START_X + (SEEDS_SECTION_WIDTH / 2.0),
+                    (SEEDS_SECTION_HEIGHT / 2.0) - SECTION_MARGIN,
+                    MIDDLE_LAYER,
+                ),
+                ..default()
             },
-        )
-        .with_alignment(TextAlignment::CENTER),
-        transform: Transform {
-            translation: Vec3::new(
-                SEEDS_SECTION_START_X + (SEEDS_SECTION_WIDTH / 2.0),
-                (SEEDS_SECTION_HEIGHT / 2.0) - SECTION_MARGIN,
-                MIDDLE_LAYER,
-            ),
             ..default()
-        },
-        ..default()
-    });
+        })
+        .insert(GameComponent);
 
     let seed_spaces_start = ((SEED_SPACE_MARGIN + SEED_SPACE_SIZE) * NUM_SEED_SPACES as f32) / 2.0;
 
@@ -373,6 +391,7 @@ fn game_setup(
                 },
                 ..default()
             })
+            .insert(GameComponent)
             .insert(SeedSpace(i));
     }
 
@@ -675,6 +694,7 @@ fn update_plant_display(
                             },
                             ..default()
                         })
+                        .insert(GameComponent)
                         .insert(PlantImage(plant_space.0))
                         .insert(Draggable)
                         .insert(Interactable {
@@ -766,6 +786,7 @@ fn update_plant_display(
                             },
                             ..default()
                         })
+                        .insert(GameComponent)
                         .insert(PlantImage(plant_space.0))
                         .insert(Interactable {
                             size: Vec2::new(200.0, 200.0),
@@ -803,6 +824,7 @@ fn update_plant_display(
                             },
                             ..default()
                         })
+                        .insert(GameComponent)
                         .insert(PlantImage(plant_space.0))
                         .insert(Interactable {
                             size: Vec2::new(200.0, 200.0),
@@ -921,6 +943,7 @@ fn update_seed_display(
                     },
                     ..default()
                 })
+                .insert(GameComponent)
                 .insert(SeedImage(seed_space.0))
                 .insert(Draggable)
                 .insert(Interactable {
@@ -945,6 +968,7 @@ fn update_seed_display(
                     visibility: Visibility { is_visible: false },
                     ..default()
                 })
+                .insert(GameComponent)
                 .insert(SeedInfo(seed_space.0))
                 .with_children(|parent| {
                     parent.spawn_bundle(Text2dBundle {
@@ -1133,7 +1157,11 @@ fn draggable_drop_system(
 }
 
 /// Moves to the win state if the player has won
-fn check_win_system(planters: Res<Planters>, mut game_state: ResMut<State<GameState>>) {
+fn check_win_system(
+    planters: Res<Planters>,
+    mut set_up: ResMut<SetUp>,
+    mut game_state: ResMut<State<GameState>>,
+) {
     let has_smart_plant = planters.0.iter().any(|planter| {
         if let Planter::Plant(plant) = planter {
             plant.get_phenotype().intelligence >= GOAL_INTELLIGENCE as i32
@@ -1143,6 +1171,7 @@ fn check_win_system(planters: Res<Planters>, mut game_state: ResMut<State<GameSt
     });
 
     if has_smart_plant {
+        set_up.0 = false;
         game_state.overwrite_set(GameState::Win).unwrap();
     }
 }
@@ -1151,6 +1180,7 @@ fn check_win_system(planters: Res<Planters>, mut game_state: ResMut<State<GameSt
 fn check_lose_system(
     planters: Res<Planters>,
     seeds: Res<Seeds>,
+    mut set_up: ResMut<SetUp>,
     mut game_state: ResMut<State<GameState>>,
 ) {
     let has_plant_or_planted_seed = planters
@@ -1161,6 +1191,7 @@ fn check_lose_system(
     let has_seed = !seeds.0.is_empty();
 
     if !has_plant_or_planted_seed && !has_seed {
+        set_up.0 = false;
         game_state.overwrite_set(GameState::Lose).unwrap();
     }
 }
