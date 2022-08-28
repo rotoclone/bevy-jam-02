@@ -55,10 +55,28 @@ impl Plugin for GamePlugin {
             )
             .add_system(next_season_button_system)
             .add_system(help_button_system)
-            .add_system(plant_display_system.with_run_criteria(is_set_up))
-            .add_system(seed_display_system.with_run_criteria(is_set_up))
+            .add_system(
+                plant_display_system
+                    .with_run_criteria(is_set_up)
+                    .after(seed_plant_system),
+            )
+            .add_system(
+                seed_display_system
+                    .with_run_criteria(is_set_up)
+                    .after(seed_plant_system),
+            )
             .add_system(being_dragged_system)
             .add_system(draggable_pickup_system)
+            .add_system(
+                plant_splice_system
+                    .after(being_dragged_system)
+                    .before(draggable_drop_system),
+            )
+            .add_system(
+                seed_plant_system
+                    .after(being_dragged_system)
+                    .before(draggable_drop_system),
+            )
             .add_system(draggable_drop_system.after(being_dragged_system))
             .add_system(seed_tooltip_system.after(draggable_drop_system))
             .insert_resource(SetUp(false))
@@ -94,9 +112,9 @@ struct HelpScreen;
 #[derive(Component)]
 struct PlantSpace(usize);
 
-impl Plants {
-    /// Gets the plant with the provided ID, if there is one.
-    fn with_id(&self, id: usize) -> Option<&Plant> {
+impl Planters {
+    /// Gets the planter with the provided ID, if there is one.
+    fn with_id(&self, id: usize) -> Option<&Planter> {
         self.0.get(id)
     }
 }
@@ -108,6 +126,15 @@ impl Seeds {
     /// Gets the seed with the provided ID, if there is one.
     fn with_id(&self, id: usize) -> Option<&Seed> {
         self.0.get(id)
+    }
+
+    /// Removes and returns the seed with the provided ID, if there is one.
+    fn take_with_id(&mut self, id: usize) -> Option<Seed> {
+        if id < self.0.len() {
+            Some(self.0.remove(id))
+        } else {
+            None
+        }
     }
 }
 
@@ -140,7 +167,7 @@ struct Season(u32);
 
 struct SetUp(bool);
 
-fn generate_starting_plants() -> Plants {
+fn generate_starting_plants() -> Planters {
     //TODO generate plant names?
     let plant_1 = Plant {
         name: "Roberto".to_string(),
@@ -184,7 +211,12 @@ fn generate_starting_plants() -> Plants {
         ],
     };
 
-    Plants(vec![plant_1, plant_2, plant_3])
+    Planters(vec![
+        Planter::Plant(plant_1),
+        Planter::Plant(plant_2),
+        Planter::Plant(plant_3),
+        Planter::Empty,
+    ])
 }
 
 fn is_set_up(set_up: Res<SetUp>) -> ShouldRun {
@@ -579,19 +611,19 @@ fn help_button_system(
 }
 
 fn plant_display_system(
-    plants: Res<Plants>,
+    planters: Res<Planters>,
     commands: Commands,
     asset_server: Res<AssetServer>,
     plant_spaces_query: Query<(&Transform, &PlantSpace)>,
     plant_images_query: Query<Entity, With<PlantImage>>,
     plant_info_query: Query<(&mut Text, &PlantInfo)>,
 ) {
-    if !plants.is_changed() {
+    if !planters.is_changed() {
         return;
     }
 
     update_plant_display(
-        plants,
+        planters,
         commands,
         asset_server,
         plant_spaces_query,
@@ -601,7 +633,7 @@ fn plant_display_system(
 }
 
 fn update_plant_display(
-    plants: Res<Plants>,
+    planters: Res<Planters>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     plant_spaces_query: Query<(&Transform, &PlantSpace)>,
@@ -609,7 +641,7 @@ fn update_plant_display(
     mut plant_info_query: Query<(&mut Text, &PlantInfo)>,
 ) {
     for entity in plant_images_query.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 
     let mut plant_info_text_map = HashMap::new();
@@ -618,90 +650,177 @@ fn update_plant_display(
     }
 
     for (transform, plant_space) in plant_spaces_query.iter() {
-        if let Some(plant) = plants.with_id(plant_space.0) {
-            let phenotype = plant.get_phenotype();
+        if let Some(planter) = planters.with_id(plant_space.0) {
+            match planter {
+                Planter::Plant(plant) => {
+                    let phenotype = plant.get_phenotype();
 
-            // spawn plant images
-            commands
-                .spawn_bundle(SpriteBundle {
-                    sprite: Sprite {
-                        custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
-                        color: Color::NONE,
-                        ..default()
-                    },
-                    transform: Transform {
-                        translation: Vec3::new(
-                            transform.translation.x,
-                            transform.translation.y
-                                + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
-                            PLANTS_LAYER,
-                        ),
-                        ..default()
-                    },
-                    ..default()
-                })
-                .insert(PlantImage(plant_space.0))
-                .insert(Draggable)
-                .insert(Interactable {
-                    size: Vec2::new(200.0, 200.0),
-                })
-                .with_children(|parent| {
-                    // stem
-                    parent.spawn_bundle(SpriteBundle {
-                        texture: get_image_for_stem_style(&phenotype.stem_style, &asset_server),
-                        sprite: Sprite {
-                            color: get_color_for_stem_color(&phenotype.stem_color),
+                    // spawn plant images
+                    commands
+                        .spawn_bundle(SpriteBundle {
+                            sprite: Sprite {
+                                custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
+                                color: Color::NONE,
+                                ..default()
+                            },
+                            transform: Transform {
+                                translation: Vec3::new(
+                                    transform.translation.x,
+                                    transform.translation.y
+                                        + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
+                                    PLANTS_LAYER,
+                                ),
+                                ..default()
+                            },
                             ..default()
-                        },
-                        ..default()
-                    });
+                        })
+                        .insert(PlantImage(plant_space.0))
+                        .insert(Draggable)
+                        .insert(Interactable {
+                            size: Vec2::new(200.0, 200.0),
+                        })
+                        .with_children(|parent| {
+                            // stem
+                            parent.spawn_bundle(SpriteBundle {
+                                texture: get_image_for_stem_style(
+                                    &phenotype.stem_style,
+                                    &asset_server,
+                                ),
+                                sprite: Sprite {
+                                    color: get_color_for_stem_color(&phenotype.stem_color),
+                                    ..default()
+                                },
+                                ..default()
+                            });
 
-                    // fruit
-                    parent.spawn_bundle(SpriteBundle {
-                        texture: get_image_for_fruit_style(&phenotype.fruit_style, &asset_server),
-                        sprite: Sprite {
-                            color: get_color_for_fruit_color(&phenotype.fruit_color),
-                            ..default()
-                        },
-                        transform: Transform {
-                            translation: Vec3::new(0.0, 0.0, 1.0),
-                            ..default()
-                        },
-                        ..default()
-                    });
-                });
+                            // fruit
+                            parent.spawn_bundle(SpriteBundle {
+                                texture: get_image_for_fruit_style(
+                                    &phenotype.fruit_style,
+                                    &asset_server,
+                                ),
+                                sprite: Sprite {
+                                    color: get_color_for_fruit_color(&phenotype.fruit_color),
+                                    ..default()
+                                },
+                                transform: Transform {
+                                    translation: Vec3::new(0.0, 0.0, 1.0),
+                                    ..default()
+                                },
+                                ..default()
+                            });
+                        });
 
-            // update plant info
-            if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
-                let phenotype = plant.get_phenotype();
+                    // update plant info
+                    if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
+                        let phenotype = plant.get_phenotype();
 
-                let name_text = format!("Name: {}", plant.name);
+                        let name_text = format!("Name: {}", plant.name);
 
-                let intelligence = if phenotype.intelligence < 0 {
-                    0
-                } else {
-                    phenotype.intelligence as usize
-                };
-                let intelligence_filled_bar = "#".repeat(intelligence);
-                let intelligence_empty_bar =
-                    " ".repeat(MAX_INTELLIGENCE.saturating_sub(intelligence));
-                let intelligence_text =
-                    format!("Intelligence:\n[{intelligence_filled_bar}{intelligence_empty_bar}]");
+                        let intelligence = if phenotype.intelligence < 0 {
+                            0
+                        } else {
+                            phenotype.intelligence as usize
+                        };
+                        let intelligence_filled_bar = "#".repeat(intelligence);
+                        let intelligence_empty_bar =
+                            " ".repeat(MAX_INTELLIGENCE.saturating_sub(intelligence));
+                        let intelligence_text = format!(
+                            "Intelligence:\n[{intelligence_filled_bar}{intelligence_empty_bar}]"
+                        );
 
-                let pest_resistance = if phenotype.pest_resistance < 0 {
-                    0
-                } else {
-                    phenotype.pest_resistance as usize
-                };
-                let pest_resistance_filled_bar = "#".repeat(pest_resistance);
-                let pest_resistance_empty_bar =
-                    " ".repeat(MAX_PEST_RESISTANCE.saturating_sub(pest_resistance));
-                let pest_resistance_text = format!(
+                        let pest_resistance = if phenotype.pest_resistance < 0 {
+                            0
+                        } else {
+                            phenotype.pest_resistance as usize
+                        };
+                        let pest_resistance_filled_bar = "#".repeat(pest_resistance);
+                        let pest_resistance_empty_bar =
+                            " ".repeat(MAX_PEST_RESISTANCE.saturating_sub(pest_resistance));
+                        let pest_resistance_text = format!(
                     "Pest Resistance:\n[{pest_resistance_filled_bar}{pest_resistance_empty_bar}]"
                 );
 
-                text.sections[0].value =
-                    format!("{name_text}\n\n{intelligence_text}\n{pest_resistance_text}");
+                        text.sections[0].value =
+                            format!("{name_text}\n\n{intelligence_text}\n{pest_resistance_text}");
+                    }
+                }
+                Planter::DeadPlant(dead_plant) => {
+                    // spawn plant image
+                    commands
+                        .spawn_bundle(SpriteBundle {
+                            sprite: Sprite {
+                                custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
+                                color: Color::NONE,
+                                ..default()
+                            },
+                            transform: Transform {
+                                translation: Vec3::new(
+                                    transform.translation.x,
+                                    transform.translation.y
+                                        + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
+                                    PLANTS_LAYER,
+                                ),
+                                ..default()
+                            },
+                            ..default()
+                        })
+                        .insert(PlantImage(plant_space.0))
+                        .insert(Interactable {
+                            size: Vec2::new(200.0, 200.0),
+                        })
+                        .with_children(|parent| {
+                            parent.spawn_bundle(SpriteBundle {
+                                texture: asset_server.load("dead_plant.png"),
+                                ..default()
+                            });
+                        });
+
+                    // update plant info
+                    if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
+                        text.sections[0].value = format!("RIP {}\nEaten by pests", dead_plant.name);
+                    }
+                }
+                Planter::Seed(seed) => {
+                    // spawn plant image
+                    commands
+                        .spawn_bundle(SpriteBundle {
+                            sprite: Sprite {
+                                custom_size: Some(Vec2::new(PLANT_SPACE_SIZE, PLANT_SPACE_SIZE)),
+                                color: Color::NONE,
+                                ..default()
+                            },
+                            transform: Transform {
+                                translation: Vec3::new(
+                                    transform.translation.x,
+                                    transform.translation.y
+                                        + ((PLANT_SPACE_HEIGHT - PLANT_SPACE_SIZE) / 2.0),
+                                    PLANTS_LAYER,
+                                ),
+                                ..default()
+                            },
+                            ..default()
+                        })
+                        .insert(PlantImage(plant_space.0))
+                        .insert(Interactable {
+                            size: Vec2::new(200.0, 200.0),
+                        })
+                        .with_children(|parent| {
+                            parent.spawn_bundle(SpriteBundle {
+                                texture: asset_server.load("planted_seed.png"),
+                                ..default()
+                            });
+                        });
+
+                    // update plant info
+                    if let Some(text) = plant_info_text_map.get_mut(&plant_space.0) {
+                        text.sections[0].value = format!(
+                            "A seed made from\n{}\nand\n{}",
+                            seed.parent_name_1, seed.parent_name_2
+                        );
+                    }
+                }
+                Planter::Empty => (),
             }
         }
     }
@@ -777,11 +896,11 @@ fn update_seed_display(
     let main_font = asset_server.load(MAIN_FONT);
 
     for entity in seed_images_query.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 
     for entity in seed_info_query.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).despawn_recursive();
     }
 
     for (transform, seed_space) in seed_spaces_query.iter() {
@@ -847,22 +966,6 @@ fn update_seed_display(
     }
 }
 
-/* TODO
-/// Handles updating the position of entities that are being dragged by the mouse.
-fn being_dragged_system(
-    cursor_position: Res<CursorPosition>,
-    mut dragged_query: Query<&mut Transform, With<BeingDragged>>,
-) {
-    if let Some(pos) = cursor_position.0 {
-        for mut transform in dragged_query.iter_mut() {
-            println!("moving a thing to {pos}"); //TODO remove
-            transform.translation.x = pos.x;
-            transform.translation.y = pos.y;
-        }
-    }
-}
-*/
-
 /// Handles showing and hiding seed tooltips
 fn seed_tooltip_system(
     buttons: Res<Input<MouseButton>>,
@@ -927,7 +1030,6 @@ fn draggable_pickup_system(
         if let Some(pos) = cursor_position.0 {
             for (transform, interactable, entity) in draggable_query.iter() {
                 if intersects(pos, transform.translation.truncate(), interactable.size) {
-                    println!("picked up a thing"); //TODO remove
                     commands.entity(entity).insert(BeingDragged {
                         original_position: transform.translation,
                     });
@@ -943,6 +1045,75 @@ fn intersects(point: Vec2, center_point: Vec2, size: Vec2) -> bool {
         && point.x <= center_point.x + (size.x / 2.0) + 1.0
         && point.y >= center_point.y - (size.y / 2.0) - 1.0
         && point.y <= center_point.y + (size.y / 2.0) + 1.0
+}
+
+fn plant_splice_system(
+    mouse_buttons: Res<Input<MouseButton>>,
+    cursor_position: Res<CursorPosition>,
+    planters: Res<Planters>,
+    mut seeds: ResMut<Seeds>,
+    dragged_plant_query: Query<&PlantImage, With<BeingDragged>>,
+    plant_space_query: Query<(&Transform, &PlantSpace, &Interactable)>,
+) {
+    if !mouse_buttons.pressed(MouseButton::Left) {
+        if let Some(pos) = cursor_position.0 {
+            let dragged_plant_id = dragged_plant_query.get_single().ok().map(|image| image.0);
+            let mut target_plant_id = None;
+            for (transform, plant_space, interactable) in plant_space_query.iter() {
+                if intersects(pos, transform.translation.truncate(), interactable.size) {
+                    target_plant_id = Some(plant_space.0);
+                    break;
+                }
+            }
+
+            if dragged_plant_id == target_plant_id {
+                return;
+            }
+
+            let dragged_plant = dragged_plant_id.and_then(|id| planters.with_id(id));
+            let target_plant = target_plant_id.and_then(|id| planters.with_id(id));
+
+            if let Some(Planter::Plant(plant_1)) = dragged_plant {
+                if let Some(Planter::Plant(plant_2)) = target_plant {
+                    if seeds.0.len() < NUM_SEED_SPACES {
+                        let new_seed = splice_plants(plant_1, plant_2);
+                        seeds.0.push(new_seed);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn seed_plant_system(
+    mut commands: Commands,
+    mouse_buttons: Res<Input<MouseButton>>,
+    cursor_position: Res<CursorPosition>,
+    mut planters: ResMut<Planters>,
+    mut seeds: ResMut<Seeds>,
+    dragged_seed_query: Query<(Entity, &SeedImage), With<BeingDragged>>,
+    plant_space_query: Query<(&Transform, &PlantSpace, &Interactable)>,
+) {
+    if !mouse_buttons.pressed(MouseButton::Left) {
+        if let Some(pos) = cursor_position.0 {
+            let mut target_planter_id = None;
+            for (transform, plant_space, interactable) in plant_space_query.iter() {
+                if intersects(pos, transform.translation.truncate(), interactable.size) {
+                    target_planter_id = Some(plant_space.0);
+                    break;
+                }
+            }
+
+            if let Some(planter_id) = target_planter_id {
+                for (entity, seed_image) in dragged_seed_query.iter() {
+                    if let Some(seed) = seeds.take_with_id(seed_image.0) {
+                        planters.0[planter_id] = Planter::Seed(seed);
+                        commands.entity(entity).despawn_recursive();
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Handles dropping things that are being dragged.

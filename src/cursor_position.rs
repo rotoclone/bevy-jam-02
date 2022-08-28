@@ -2,7 +2,6 @@ use bevy::render::camera::RenderTarget;
 
 use crate::*;
 
-//TODO remove?
 pub struct CursorPositionPlugin;
 
 impl Plugin for CursorPositionPlugin {

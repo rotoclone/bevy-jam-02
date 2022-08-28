@@ -5,7 +5,14 @@ pub struct Plant {
     pub genes: Vec<Gene>,
 }
 
-pub struct Plants(pub Vec<Plant>);
+pub struct Planters(pub Vec<Planter>);
+
+pub enum Planter {
+    Plant(Plant),
+    DeadPlant(Plant),
+    Seed(Seed),
+    Empty,
+}
 
 pub struct Phenotype {
     pub stem_style: StemStyle,
@@ -101,6 +108,15 @@ impl Plant {
             intelligence,
             pest_resistance,
         }
+    }
+}
+
+/// Splices together the genes of 2 plants
+pub fn splice_plants(plant_1: &Plant, plant_2: &Plant) -> Seed {
+    Seed {
+        parent_name_1: plant_1.name.clone(),
+        parent_name_2: plant_2.name.clone(),
+        genes: vec![], //TODO
     }
 }
 
