@@ -158,6 +158,8 @@ pub struct ImageAssets {
     pub dead_plant: Handle<Image>,
     #[asset(path = "images/glasses.png")]
     pub glasses: Handle<Image>,
+    #[asset(path = "images/background.png")]
+    pub background: Handle<Image>,
 }
 
 #[derive(Component)]
@@ -290,7 +292,6 @@ fn loading_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 fn generate_starting_plants() -> Planters {
-    //TODO generate plant names?
     let plant_1 = Plant {
         name: vec!["ro", "ber", "to"].into(),
         genes: vec![
@@ -365,12 +366,23 @@ fn game_setup(
     *seeds = Seeds(Vec::new());
     smart_plant.0 = None;
 
+    /*
+    // background
+    commands
+        .spawn_bundle(SpriteBundle {
+            texture: image_assets.background.clone(),
+            transform: Transform {
+                translation: Vec3::new(0.0, 0.0, BACKGROUND_LAYER),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(GameComponent);
+    */
+
     //
     // plants section
     //
-
-    // background
-    //TODO
 
     let plants_section_center_x = PLANTS_SECTION_START_X + (PLANTS_SECTION_WIDTH / 2.0);
 
@@ -465,9 +477,6 @@ fn game_setup(
     //
     // seeds section
     //
-
-    // background
-    //TODO
 
     // section text
     commands
@@ -602,8 +611,6 @@ fn game_setup(
                         ..default()
                     },
                     color: NORMAL_BUTTON.into(),
-                    // hide the button cuz the help screen shows underneath the other UI for some reason
-                    visibility: Visibility { is_visible: true }, //TODO
                     ..default()
                 })
                 .insert(HelpButton)
@@ -748,7 +755,7 @@ fn start_background_music(
             Duration::from_secs(3),
             AudioEasing::OutPowi(2),
         ))
-        .with_volume(0.5)
+        .with_volume(0.33)
         .looped();
 }
 

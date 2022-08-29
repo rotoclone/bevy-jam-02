@@ -193,5 +193,5 @@ fn win_setup(
 }
 
 fn play_victory_sound(audio_assets: Res<AudioAssets>, audio: Res<AudioChannel<ForegroundChannel>>) {
-    audio.play(audio_assets.victory.clone());
+    audio.play(audio_assets.victory.clone()).with_volume(0.5);
 }
