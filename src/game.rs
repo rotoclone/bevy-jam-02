@@ -75,7 +75,9 @@ impl Plugin for GamePlugin {
                 .with_system(despawn_components_system::<GameComponent>),
         )
         .add_system(next_season_button_system)
+        .add_system(restart_button_system)
         .add_system(help_button_system)
+        .add_system(close_help_button_system)
         .add_system(
             plant_display_system
                 .with_run_criteria(is_set_up)
@@ -169,6 +171,9 @@ struct SeasonText;
 
 #[derive(Component)]
 struct NextSeasonButton;
+
+#[derive(Component)]
+struct RestartButton;
 
 #[derive(Component)]
 struct HelpButton;
@@ -340,6 +345,7 @@ fn is_set_up(set_up: Res<SetUp>) -> ShouldRun {
     set_up.0.into()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn game_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -550,6 +556,36 @@ fn game_setup(
                 )
                 .insert(SeasonText);
 
+            // restart button
+            parent
+                .spawn_bundle(ButtonBundle {
+                    style: Style {
+                        size: Size::new(Val::Px(200.0), Val::Px(TOP_BAR_HEIGHT * 0.8)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::all(Val::Auto),
+                        position_type: PositionType::Absolute,
+                        position: UiRect {
+                            left: Val::Px(5.0),
+                            ..default()
+                        },
+                        ..default()
+                    },
+                    color: NORMAL_BUTTON.into(),
+                    ..default()
+                })
+                .insert(RestartButton)
+                .with_children(|parent| {
+                    parent.spawn_bundle(TextBundle::from_section(
+                        "Restart",
+                        TextStyle {
+                            font: main_font.clone(),
+                            font_size: 30.0,
+                            color: Color::SEA_GREEN,
+                        },
+                    ));
+                });
+
             // help button
             parent
                 .spawn_bundle(ButtonBundle {
@@ -567,7 +603,7 @@ fn game_setup(
                     },
                     color: NORMAL_BUTTON.into(),
                     // hide the button cuz the help screen shows underneath the other UI for some reason
-                    visibility: Visibility { is_visible: false },
+                    visibility: Visibility { is_visible: true }, //TODO
                     ..default()
                 })
                 .insert(HelpButton)
@@ -632,17 +668,14 @@ fn game_setup(
     commands
         .spawn_bundle(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(90.0), Val::Percent(90.0)),
-                position_type: PositionType::Absolute,
-                position: UiRect {
-                    top: Val::Px(0.0),
-                    ..default()
-                },
+                size: Size::new(Val::Percent(90.0), Val::Percent(80.0)),
+                position_type: PositionType::Relative,
+                margin: UiRect::all(Val::Auto),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
             },
-            color: Color::rgba(0.0, 0.0, 0.0, 0.9).into(),
+            color: Color::rgba(0.1, 0.1, 0.1, 0.99).into(),
             visibility: Visibility { is_visible: false },
             ..default()
         })
@@ -650,23 +683,25 @@ fn game_setup(
         .insert(HelpScreen)
         .with_children(|parent| {
             // help text
-            parent
-                .spawn_bundle(
-                    TextBundle::from_section(
-                        HELP_TEXT,
-                        TextStyle {
-                            font: main_font.clone(),
-                            font_size: 30.0,
-                            color: Color::WHITE,
-                        },
-                    )
-                    .with_text_alignment(TextAlignment::CENTER)
-                    .with_style(Style {
-                        margin: UiRect::all(Val::Auto),
-                        ..default()
-                    }),
+            parent.spawn_bundle(
+                TextBundle::from_section(
+                    HELP_TEXT,
+                    TextStyle {
+                        font: main_font.clone(),
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                    },
                 )
-                .insert(SeasonText);
+                .with_text_alignment(TextAlignment::CENTER)
+                .with_style(Style {
+                    margin: UiRect::all(Val::Auto),
+                    max_size: Size {
+                        width: Val::Px(WINDOW_WIDTH * 0.8),
+                        ..default()
+                    },
+                    ..default()
+                }),
+            );
 
             // close button
             parent
@@ -710,7 +745,7 @@ fn start_background_music(
     audio
         .play(audio_assets.background_music.clone())
         .fade_in(AudioTween::new(
-            Duration::from_secs(5),
+            Duration::from_secs(3),
             AudioEasing::OutPowi(2),
         ))
         .with_volume(0.5)
@@ -749,6 +784,22 @@ fn increment_season(
     }
 }
 
+type InteractedRestartButtonTuple = (Changed<Interaction>, With<RestartButton>);
+
+/// Handles interactions with the restart button.
+fn restart_button_system(
+    mut game_state: ResMut<State<GameState>>,
+    mut set_up: ResMut<SetUp>,
+    interaction_query: Query<&Interaction, InteractedRestartButtonTuple>,
+) {
+    for interaction in interaction_query.iter() {
+        if *interaction == Interaction::Clicked {
+            set_up.0 = false;
+            game_state.set(GameState::GameLoading).unwrap();
+        }
+    }
+}
+
 type InteractedHelpButtonTuple = (Changed<Interaction>, With<HelpButton>);
 
 /// Handles interactions with the help button
@@ -760,6 +811,22 @@ fn help_button_system(
         if *interaction == Interaction::Clicked {
             for mut visibility in help_screen_query.iter_mut() {
                 visibility.is_visible = true;
+            }
+        }
+    }
+}
+
+type InteractedCloseHelpButtonTuple = (Changed<Interaction>, With<CloseHelpButton>);
+
+/// Handles interactions with the close help button
+fn close_help_button_system(
+    mut help_screen_query: Query<&mut Visibility, With<HelpScreen>>,
+    interaction_query: Query<&Interaction, InteractedCloseHelpButtonTuple>,
+) {
+    for interaction in interaction_query.iter() {
+        if *interaction == Interaction::Clicked {
+            for mut visibility in help_screen_query.iter_mut() {
+                visibility.is_visible = false;
             }
         }
     }
@@ -812,7 +879,7 @@ fn update_plant_display(
 
                     spawn_plant_image(
                         &mut commands,
-                        &transform,
+                        transform,
                         &phenotype,
                         &image_assets,
                         plant_space.0,
@@ -972,7 +1039,7 @@ pub fn spawn_plant_image(
         .with_children(|parent| {
             // stem
             parent.spawn_bundle(SpriteBundle {
-                texture: get_image_for_stem_style(&phenotype.stem_style, &image_assets),
+                texture: get_image_for_stem_style(&phenotype.stem_style, image_assets),
                 sprite: Sprite {
                     color: get_color_for_stem_color(&phenotype.stem_color),
                     ..default()
@@ -982,7 +1049,7 @@ pub fn spawn_plant_image(
 
             // fruit
             parent.spawn_bundle(SpriteBundle {
-                texture: get_image_for_fruit_style(&phenotype.fruit_style, &image_assets),
+                texture: get_image_for_fruit_style(&phenotype.fruit_style, image_assets),
                 sprite: Sprite {
                     color: get_color_for_fruit_color(&phenotype.fruit_color),
                     ..default()
@@ -1017,7 +1084,7 @@ fn get_color_for_stem_color(color: &StemColor) -> Color {
     match color {
         StemColor::Brown => Color::rgb(0.32, 0.27, 0.14),
         StemColor::Green => Color::DARK_GREEN,
-        StemColor::Blue => Color::NAVY,
+        StemColor::Blue => Color::rgb(0.09, 0.37, 0.64),
     }
 }
 

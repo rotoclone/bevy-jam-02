@@ -1,7 +1,5 @@
 use rand::{seq::SliceRandom, Rng};
 
-use crate::*;
-
 const PEST_DESTRUCTION_THRESHOLD: i32 = 5;
 const PEST_DESTRUCTION_CHANCE: f32 = 0.18;
 

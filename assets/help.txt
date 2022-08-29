@@ -1,1 +1,9 @@
-Ur tryna make a smart plant and stuff
+Your goal is to grow a plant with a high enough intelligence score that it can solve an unsolved math problem and win you a big cash prize.
+
+To splice together two plants, drag one plant on top of another. This will produce a seed (if you have room for one).
+
+To plant a seed, drag the seed to one of the planters. Any existing item in the planter will be replaced, so be careful!
+
+Once you've planted all the seeds you want, click the "Next Season" button to advance to the next season. This will cause all the seeds you've planted to grow into plants. But if your plants' pest resistance is too low, you may find that they get eaten by pests!
+
+Tip: Try to maintain some genetic diversity. If you don't, you can get into a state where your plants' genes are all identical, making it impossible to increase their intelligence by splicing them together. In this case your only choice is to restart.

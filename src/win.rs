@@ -126,7 +126,7 @@ fn win_setup(
             text: Text::from_section(
                 plant.name.to_string(),
                 TextStyle {
-                    font: title_font.clone(),
+                    font: title_font,
                     font_size: 40.0,
                     color: Color::WHITE,
                 },
@@ -148,9 +148,9 @@ fn win_setup(
     let extra_intelligence = phenotype.intelligence - GOAL_INTELLIGENCE;
     let take_credit_chance = extra_intelligence as f32 * PLANT_TOO_SMART_CHANCE;
     let end_text = if rand::thread_rng().gen::<f32>() <= take_credit_chance {
-        format!("{} solved the math problem, but took credit for it themselves!\nThey used the prize money to start their own farm.\nYou are forced to work for them. The pay is pretty good.\nYou hate to admit it, but {} is actually\nway better at running a farm than you were.", plant.name, plant.name)
+        format!("{} solved an unsolved math problem, but took credit for it themselves!\nThey used the prize money to start their own farm and you are forced to work for them. The pay is pretty good. You hate to admit it, but {} is actually way better at running a farm than you were.", plant.name, plant.name)
     } else {
-        format!("{} solved the math problem and you were able to\nuse the prize money to buy a sweet new combine harvester.\nYour farm is saved!", plant.name)
+        format!("{} solved an unsolved math problem, and you were able to use the prize money to buy a sweet new combine harvester.\nYour farm is saved!\n{} also gives you some tips for running your farm, which helps.", plant.name, plant.name)
     };
     commands
         .spawn_bundle(NodeBundle {
@@ -182,6 +182,10 @@ fn win_setup(
                 .with_text_alignment(TextAlignment::CENTER)
                 .with_style(Style {
                     margin: UiRect::all(Val::Auto),
+                    max_size: Size {
+                        width: Val::Px(WINDOW_WIDTH * 0.8),
+                        ..default()
+                    },
                     ..default()
                 }),
             );
