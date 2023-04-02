@@ -2,7 +2,7 @@
 
 For Bevy Jam 2: https://itch.io/jam/bevy-jam-2
 
-Play it on itch.io: TODO link here
+Play it on itch.io: https://the-nacho.itch.io/mr-smartyplants
 
 Licensed under the dual MIT / Apache-2.0 license
 
